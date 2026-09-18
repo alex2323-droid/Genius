@@ -1,0 +1,8 @@
+{
+  "name": "Remix Generador de Guías y Plan de Estudio",
+  "description": "Plataforma de estudio que genera guías personalizadas, calendarios y ejercicios a partir de archivos (.pdf, .ppt, .pptx, .doc) según los días restantes para el examen y el porcentaje de nota objetivo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

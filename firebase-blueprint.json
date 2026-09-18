@@ -1,0 +1,76 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Profile data for the registered student",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "targetGradeDefault": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "email", "createdAt"]
+    },
+    "StudyPlan": {
+      "title": "StudyPlan",
+      "description": "Generated study plan, syllabus guide, and customized exercises",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "daysLeft": { "type": "number" },
+        "examDate": { "type": "string" },
+        "targetGrade": { "type": "number" },
+        "studyPace": { "type": "string" },
+        "status": { "type": "string" },
+        "overview": { "type": "string" },
+        "fileNames": { "type": "array" },
+        "schedule": { "type": "array" },
+        "studyGuide": { "type": "object" },
+        "exercises": { "type": "array" },
+        "progress": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "daysLeft", "targetGrade", "createdAt"]
+    },
+    "QuizAttempt": {
+      "title": "QuizAttempt",
+      "description": "Record of a student quiz or practice exam attempt",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "studyPlanId": { "type": "string" },
+        "score": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "percentage": { "type": "number" },
+        "passed": { "type": "boolean" },
+        "answers": { "type": "object" },
+        "aiFeedback": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "studyPlanId", "score", "totalQuestions", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "entity": "User",
+      "description": "User profile document restricted to owner"
+    },
+    "/studyPlans/{planId}": {
+      "entity": "StudyPlan",
+      "description": "Study plans created by students"
+    },
+    "/quizAttempts/{attemptId}": {
+      "entity": "QuizAttempt",
+      "description": "Quiz attempts by students"
+    }
+  }
+}
