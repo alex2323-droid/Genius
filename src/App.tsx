@@ -50,15 +50,16 @@ export default function App() {
   const [tutorTopic, setTutorTopic] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Load auth state
+  // Load auth state and initial plans
   useEffect(() => {
+    // Prime state immediately with local plans for instantaneous UI
+    loadPlansFromLocalStorage();
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        await loadUserPlansFromFirestore(currentUser.uid);
-      } else {
-        // Load from local storage
-        loadPlansFromLocalStorage();
+        // Fast asynchronous sync from Firestore
+        loadUserPlansFromFirestore(currentUser.uid);
       }
     });
     return () => unsubscribe();
@@ -83,7 +84,13 @@ export default function App() {
   const loadUserPlansFromFirestore = async (uid: string) => {
     try {
       const q = query(collection(db, 'studyPlans'), where('userId', '==', uid));
-      const snap = await getDocs(q);
+      
+      // Timeout promise to prevent any UI freeze if network is slow
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Firestore timeout')), 4000)
+      );
+
+      const snap = await Promise.race([getDocs(q), timeoutPromise]);
       const fetched: StudyPlan[] = [];
       snap.forEach(docSnap => {
         fetched.push(docSnap.data() as StudyPlan);
@@ -103,7 +110,7 @@ export default function App() {
         loadPlansFromLocalStorage();
       }
     } catch (err) {
-      console.warn('Could not read from Firestore, falling back to local cache:', err);
+      console.warn('Could not read from Firestore or timed out, preserving local cache:', err);
       loadPlansFromLocalStorage();
     }
   };
