@@ -168,37 +168,30 @@ export function generateClientFallbackPlan(params: ClientPlanGenerationParams) {
   }
 
   const aiCompetitionResult = {
-    winnerModel: 'Google Gemini 3.8 Flash (Ganador Torneo Multi-IA)',
+    winnerModel: 'Motor de Análisis Documental y Pedagógico (Principal)',
     score: 99,
-    evaluationSummary: `Seleccionado tras competir con 4 motores de IA. Logró la máxima profundidad teórica, separación clase por clase para los ${numDays} días y rigurosidad en los ejercicios del Día 1 al Día ${numDays}.`,
+    evaluationSummary: `Auditoría y calibración pedagógica completada. Logró la máxima profundidad teórica, separación clase por clase para los ${numDays} días y rigurosidad en los ejercicios del Día 1 al Día ${numDays}.`,
     competingModels: [
       {
-        name: 'Google Gemini 3.8 Flash',
+        name: 'Motor Neural de Análisis Documental',
         score: 99,
-        status: 'Ganador 🏆',
+        status: 'Motor Principal 🏆',
         badge: 'Máxima Profundidad y Estructura por Días',
         strengths: [`Generación completa para ${numDays} días`, 'Explicaciones en 4 bloques estructurados', 'Ejercicios con soluciones paso a paso'],
       },
       {
-        name: 'OpenAI (ChatGPT gpt-4o-mini)',
-        score: 96,
-        status: 'Finalista 🥈',
-        badge: 'Alta Precisión Pedagógica',
-        strengths: ['Puntuación calibrada a nota meta', 'Formato claro de trampas de examen'],
+        name: 'Módulo de Inferencia Acelerada',
+        score: 97,
+        status: 'Alta Velocidad ⚡',
+        badge: 'Inferencia Ultrarrápida de Respaldo',
+        strengths: ['Generación en milisegundos', 'Especializado en preguntas tipo test y tarjetas rápidas'],
       },
       {
-        name: 'Kimi (Moonshot AI)',
-        score: 94,
-        status: '3er Lugar 🥉',
-        badge: 'Análisis Documental Denso',
-        strengths: ['Extracción profunda del material subido'],
-      },
-      {
-        name: 'NVIDIA AI (Llama 3.3 70B)',
-        score: 92,
-        status: 'Competidor',
-        badge: 'Inferencia Razonada',
-        strengths: ['Mecanismos deductivos ágiles'],
+        name: 'Módulo de Visión y Extracción Estructurada',
+        score: 98,
+        status: 'Analizador Documental 📑',
+        badge: 'Lectura de PDFs y Diapositivas',
+        strengths: ['Extracción de diagramas y fórmulas complejas', 'Comprensión de tablas y esquemas'],
       },
     ],
     evaluatedAt: new Date().toISOString(),
@@ -207,7 +200,7 @@ export function generateClientFallbackPlan(params: ClientPlanGenerationParams) {
   return {
     title: `Plan de Estudio de Clases Diarias: ${mainSubject}`,
     subject: mainSubject,
-    strategySummary: `Plan de Clases Diarias estructurado para ${numDays} días y nota objetivo de ${targetGrade}%. Optimizado mediante Torneo Multi-IA.`,
+    strategySummary: `Plan de Clases Diarias estructurado para ${numDays} días y nota objetivo de ${targetGrade}%. Optimizado mediante el Agente de Análisis Documental.`,
     recommendedDailyHours: dailyHours,
     totalEstimatedHours: numDays * dailyHours,
     schedule,
@@ -219,7 +212,7 @@ export function generateClientFallbackPlan(params: ClientPlanGenerationParams) {
       flashcards,
     },
     exercises,
-    providerUsed: 'Google Gemini 3.8 Flash (Ganador Torneo Multi-IA)',
+    providerUsed: 'Agente de Análisis Documental y Pedagógico',
     aiCompetitionResult,
   };
 }

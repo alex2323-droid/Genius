@@ -9,7 +9,6 @@ import {
 } from 'firebase/auth';
 import { 
   getFirestore, 
-  initializeFirestore,
   setLogLevel,
   collection, 
   doc, 
@@ -30,27 +29,13 @@ export const auth = getAuth(app);
 
 // Silence verbose SDK network retry notices in iframe environments
 try {
-  setLogLevel('error');
-} catch (e) {
+  setLogLevel('silent');
+} catch {
   // ignore
 }
 
-// Initialize Firestore with force long polling and ignore undefined properties
-// to ensure seamless, error-free connectivity in iframe sandboxes.
-export const db = (() => {
-  try {
-    return initializeFirestore(
-      app,
-      {
-        experimentalForceLongPolling: true,
-        ignoreUndefinedProperties: true,
-      },
-      firebaseConfig.firestoreDatabaseId
-    );
-  } catch {
-    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
-  }
-})();
+// Standard Firestore instance according to skill guidelines
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });

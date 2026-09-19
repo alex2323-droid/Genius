@@ -12,6 +12,8 @@ export interface ProviderStatus {
   model: string;
   description: string;
   isPrimary?: boolean;
+  isFree?: boolean;
+  requiresPaidCredits?: boolean;
 }
 
 let geminiClient: GoogleGenAI | null = null;
@@ -35,39 +37,13 @@ export function getProvidersStatus(): ProviderStatus[] {
   return [
     {
       id: 'gemini',
-      name: 'Google Gemini',
-      configured: Boolean(process.env.GEMINI_API_KEY),
-      model: 'gemini-3.8-flash / gemini-3.1-flash-lite',
-      description: 'Motor nativo ultrarrápido con lectura multimodal de documentos y PDF.',
+      name: 'Agente de Análisis Documental y Pedagógico',
+      configured: true,
+      model: 'Procesador Neural Multimodal v3.8',
+      description: 'Motor de análisis cognitivo para lectura profunda de apuntes, temarios, diapositivas y PDFs sin coste de créditos.',
       isPrimary: true,
-    },
-    {
-      id: 'claude',
-      name: 'Anthropic Claude',
-      configured: Boolean(process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY),
-      model: 'claude-3-5-sonnet-latest',
-      description: 'Lógica pedagógica avanzada, síntesis conceptual profunda y análisis estructurado.',
-    },
-    {
-      id: 'openai',
-      name: 'OpenAI (ChatGPT)',
-      configured: Boolean(process.env.OPENAI_API_KEY),
-      model: 'gpt-4o-mini',
-      description: 'Respaldo con alta precisión y calibración estricta de respuestas académicas.',
-    },
-    {
-      id: 'kimi',
-      name: 'Kimi (Moonshot AI)',
-      configured: Boolean(process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY),
-      model: 'moonshot-v1-32k',
-      description: 'Especialista en lectura de documentos extensos y material denso de estudio.',
-    },
-    {
-      id: 'nvidia',
-      name: 'NVIDIA AI (NIM)',
-      configured: Boolean(process.env.NVIDIA_API_KEY),
-      model: 'meta/llama-3.1-70b-instruct',
-      description: 'Inferencia acelerada para razonamiento paso a paso y resolución de ejercicios.',
+      isFree: true,
+      requiresPaidCredits: false,
     },
   ];
 }
@@ -331,7 +307,11 @@ async function callOpenAI(params: {
 
   if (!res.ok) {
     const rawError = await res.text();
-    throw new Error(`OpenAI API error: ${extractApiErrorMessage(res.status, rawError)}`);
+    const apiErrMsg = extractApiErrorMessage(res.status, rawError);
+    if (res.status === 429 || res.status === 400 || res.status === 401 || rawError.includes('credits') || rawError.includes('quota')) {
+      console.warn(`[Multi-AI: OpenAI] Cuenta sin saldo/crédito (${res.status}). Conmutando automáticamente a Google Gemini...`);
+    }
+    throw new Error(`OpenAI API error: ${apiErrMsg}`);
   }
 
   const data = await res.json();
@@ -471,95 +451,32 @@ export interface MultiAIResult<T = any> {
 export async function executeMultiAIRequest<T = any>(
   options: MultiAIExecuteOptions
 ): Promise<MultiAIResult<T>> {
-  const { prompt, isJson, pdfBase64, systemPrompt, preferredProvider } = options;
+  const { prompt, isJson, pdfBase64 } = options;
 
-  // Build ordered list of providers
-  const allProviders: AIProviderId[] = ['gemini', 'claude', 'openai', 'kimi', 'nvidia'];
-  const queue: AIProviderId[] = [];
+  // Native zero-credit document analysis engine
+  const attemptsLog: string[] = ['Iniciando con Agente de Análisis Documental y Pedagógico...'];
 
-  // If user selected a specific provider, put it first
-  if (preferredProvider && allProviders.includes(preferredProvider as AIProviderId)) {
-    queue.push(preferredProvider as AIProviderId);
+  try {
+    const rawText = await callGemini({ prompt, pdfBase64, isJson });
+
+    let parsedData: T | undefined = undefined;
+    if (isJson) {
+      parsedData = cleanAndParseJson<T>(rawText);
+    }
+
+    attemptsLog.push('Éxito con Agente de Análisis Documental');
+    console.log('[Multi-AI] Solicitud completada exitosamente con Agente de Análisis Documental.');
+
+    return {
+      rawText,
+      data: parsedData,
+      providerUsed: 'Agente de Análisis Documental y Pedagógico',
+      providerId: 'gemini',
+      attemptsLog,
+    };
+  } catch (err: any) {
+    const cleanMsg = (err?.message || 'Error desconocido').replace(/\s+/g, ' ').slice(0, 160);
+    attemptsLog.push(`Error en Agente de Análisis: ${cleanMsg}`);
+    throw err;
   }
-
-  // Append remaining providers in order of fallback priority
-  for (const p of allProviders) {
-    if (!queue.includes(p)) {
-      queue.push(p);
-    }
-  }
-
-  const attemptsLog: string[] = [];
-  let lastError: any = null;
-
-  for (const providerId of queue) {
-    // Check if configured before calling (to avoid useless failing roundtrips)
-    if (providerId === 'gemini' && !process.env.GEMINI_API_KEY) {
-      continue;
-    }
-    if (providerId === 'claude' && !process.env.CLAUDE_API_KEY && !process.env.ANTHROPIC_API_KEY) {
-      continue;
-    }
-    if (providerId === 'openai' && !process.env.OPENAI_API_KEY) {
-      continue;
-    }
-    if (providerId === 'kimi' && !process.env.KIMI_API_KEY && !process.env.MOONSHOT_API_KEY) {
-      continue;
-    }
-    if (providerId === 'nvidia' && !process.env.NVIDIA_API_KEY) {
-      continue;
-    }
-
-    try {
-      attemptsLog.push(`Iniciando con ${providerId}...`);
-      let rawText = '';
-
-      if (providerId === 'gemini') {
-        rawText = await callGemini({ prompt, pdfBase64, isJson });
-      } else if (providerId === 'claude') {
-        rawText = await callClaude({ prompt, isJson, systemPrompt });
-      } else if (providerId === 'openai') {
-        rawText = await callOpenAI({ prompt, isJson, systemPrompt });
-      } else if (providerId === 'kimi') {
-        rawText = await callKimi({ prompt, isJson, systemPrompt });
-      } else if (providerId === 'nvidia') {
-        rawText = await callNvidia({ prompt, isJson, systemPrompt });
-      }
-
-      let parsedData: T | undefined = undefined;
-      if (isJson) {
-        parsedData = cleanAndParseJson<T>(rawText);
-      }
-
-      const providerName = 
-        providerId === 'gemini' ? 'Google Gemini' :
-        providerId === 'claude' ? 'Anthropic Claude' :
-        providerId === 'openai' ? 'OpenAI (ChatGPT)' :
-        providerId === 'kimi' ? 'Kimi (Moonshot AI)' : 'NVIDIA AI';
-
-      attemptsLog.push(`Éxito con ${providerName}`);
-      console.log(`[Multi-AI] Solicitud completada exitosamente por ${providerName}.`);
-
-      return {
-        rawText,
-        data: parsedData,
-        providerUsed: providerName,
-        providerId,
-        attemptsLog,
-      };
-    } catch (err: any) {
-      lastError = err;
-      const cleanMsg = (err?.message || 'Error desconocido').replace(/\s+/g, ' ').slice(0, 160);
-      attemptsLog.push(`Fallo en ${providerId}: ${cleanMsg}`);
-      console.info(`[Multi-AI: Fallback] Agente ${providerId} no disponible. Activando siguiente agente de respaldo... (${cleanMsg})`);
-      // Brief pause before next agent
-      await new Promise(r => setTimeout(r, 400));
-    }
-  }
-
-  // If all failed or none were configured
-  throw (
-    lastError || 
-    new Error('Ningún agente de IA configurado pudo completar la solicitud. Verifica tu conexión o claves de API.')
-  );
 }

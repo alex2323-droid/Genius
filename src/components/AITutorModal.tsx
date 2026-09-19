@@ -48,7 +48,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       const data = await res.json();
       if (data.success && data.explanation) {
         setExplanation(data.explanation);
-        setProviderUsed(data.providerUsed || 'Google Gemini');
+        setProviderUsed(data.providerUsed || 'Tutor Académico Especializado');
       } else {
         setError(data.error || 'No se pudo generar la explicación.');
       }

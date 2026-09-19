@@ -590,11 +590,11 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setIsAICompetitionModalOpen(true)}
-                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[40px] text-xs font-bold text-amber-900 dark:text-amber-200 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/70 dark:hover:bg-amber-900/80 border border-amber-300 dark:border-amber-800 rounded-xl active:scale-95 transition-all cursor-pointer shadow-2xs"
-                    title="Ver auditoría y resultados de la competición entre las inteligencias artificiales"
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[40px] text-xs font-bold text-blue-900 dark:text-blue-200 bg-blue-100/80 hover:bg-blue-200 dark:bg-blue-950/70 dark:hover:bg-blue-900/80 border border-blue-300 dark:border-blue-800 rounded-xl active:scale-95 transition-all cursor-pointer shadow-2xs"
+                    title="Ver certificación pedagógica y auditoría del motor de análisis"
                   >
-                    <Trophy className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span>Torneo IA ({activePlan.aiCompetitionResult?.score || 99}/100)</span>
+                    <Trophy className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span>Auditoría IA ({activePlan.aiCompetitionResult?.score || 99}/100)</span>
                   </button>
 
                   <button

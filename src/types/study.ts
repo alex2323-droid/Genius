@@ -130,6 +130,8 @@ export interface AIProviderInfo {
   model: string;
   description: string;
   isPrimary?: boolean;
+  requiresPaidCredits?: boolean;
+  isFree?: boolean;
 }
 
 export interface QuizAttempt {

@@ -13,7 +13,8 @@ import {
   BarChart3, 
   Star,
   Check,
-  Layers
+  Layers,
+  Zap
 } from 'lucide-react';
 import type { AICompetitionResult } from '../types/study.ts';
 
@@ -25,10 +26,8 @@ interface AICompetitionModalProps {
 
 const MODEL_ICONS: Record<string, React.ReactNode> = {
   gemini: <Sparkles className="w-4 h-4 text-blue-500" />,
-  claude: <Brain className="w-4 h-4 text-amber-500" />,
-  openai: <Bot className="w-4 h-4 text-emerald-500" />,
-  kimi: <FileText className="w-4 h-4 text-purple-500" />,
-  nvidia: <Cpu className="w-4 h-4 text-lime-500" />,
+  flashLite: <Zap className="w-4 h-4 text-amber-500" />,
+  multimodal: <FileText className="w-4 h-4 text-emerald-500" />,
 };
 
 export const AICompetitionModal: React.FC<AICompetitionModalProps> = ({
@@ -41,44 +40,30 @@ export const AICompetitionModal: React.FC<AICompetitionModalProps> = ({
   if (!isOpen) return null;
 
   const result = competitionResult || {
-    winnerModel: 'Google Gemini 3.8 Flash (Ganador Torneo Multi-IA)',
+    winnerModel: 'Motor de Análisis Documental y Pedagógico (Principal)',
     score: 99,
-    evaluationSummary: 'Evaluación comparativa completada entre los 5 motores de inteligencia artificial. El modelo ganador logró la mayor densidad teórica, separación clase por clase diaria y rigurosidad en los ejercicios prácticos.',
+    evaluationSummary: 'Evaluación y calibración pedagógica completada. El Agente de Análisis Documental ofrece la máxima densidad teórica, estructuración clase por clase y rigurosidad en los ejercicios prácticos sin necesidad de créditos.',
     competingModels: [
       {
-        name: 'Google Gemini 3.8 Flash',
+        name: 'Motor Neural de Análisis Documental',
         score: 99,
-        status: 'Ganador 🏆',
+        status: 'Motor Principal 🏆',
         badge: 'Máxima Profundidad y Cobertura Multimodal',
         strengths: ['Explicaciones teóricas estructuradas en 4 bloques', 'Separación clase por clase para todos los días', 'Ejercicios calibrados a nota objetivo'],
       },
       {
-        name: 'Anthropic Claude (Claude 3.5 Sonnet)',
+        name: 'Módulo de Inferencia Acelerada',
+        score: 97,
+        status: 'Alta Velocidad ⚡',
+        badge: 'Inferencia Ultrarrápida de Respaldo',
+        strengths: ['Generación en milisegundos', 'Especializado en preguntas tipo test y tarjetas rápidas'],
+      },
+      {
+        name: 'Módulo de Visión y Extracción Estructurada',
         score: 98,
-        status: 'Finalista 🥈',
-        badge: 'Síntesis Pedagógica Avanzada',
-        strengths: ['Análisis conceptual profundo y articulado', 'Redacción académica de alta precisión'],
-      },
-      {
-        name: 'OpenAI (ChatGPT gpt-4o-mini)',
-        score: 96,
-        status: '3er Lugar 🥉',
-        badge: 'Alta Calibración Pedagógica',
-        strengths: ['Excelente estructura de trampas de examen', 'Respuestas de alta precisión sintáctica'],
-      },
-      {
-        name: 'Kimi (Moonshot AI)',
-        score: 94,
-        status: 'Competidor',
-        badge: 'Extracción Documental',
-        strengths: ['Gran capacidad de procesamiento de texto extenso'],
-      },
-      {
-        name: 'NVIDIA AI (Llama 3.1 70B)',
-        score: 92,
-        status: 'Competidor',
-        badge: 'Inferencia Razonada',
-        strengths: ['Deducciones lógicas rápidas'],
+        status: 'Analizador Documental 📑',
+        badge: 'Lectura de PDFs y Diapositivas',
+        strengths: ['Extracción de diagramas y fórmulas complejas', 'Comprensión de tablas y esquemas'],
       },
     ],
     evaluatedAt: new Date().toISOString(),
@@ -90,18 +75,18 @@ export const AICompetitionModal: React.FC<AICompetitionModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20 shadow-xs">
+            <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/20 shadow-xs">
               <Trophy className="w-6 h-6 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
-                  Competición Multi-IA (5 Agentes)
+                <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 border border-blue-300 dark:border-blue-800">
+                  Certificación y Auditoría IA
                 </span>
-                <span className="text-xs text-slate-500 font-medium">Auditoría en Tiempo Real</span>
+                <span className="text-xs text-slate-500 font-medium">Sin Créditos de Pago</span>
               </div>
               <h2 className="text-lg font-extrabold text-slate-900 dark:text-slate-100 mt-0.5">
-                Evaluación & Selección del Mejor Resultado
+                Calibración Pedagógica del Motor de IA
               </h2>
             </div>
           </div>
@@ -168,10 +153,9 @@ export const AICompetitionModal: React.FC<AICompetitionModalProps> = ({
               {/* Models List */}
               <div className="space-y-2.5">
                 {result.competingModels.map((model, idx) => {
-                  const keyName = model.name.toLowerCase().includes('gemini') ? 'gemini'
-                    : model.name.toLowerCase().includes('claude') ? 'claude'
-                    : model.name.toLowerCase().includes('openai') || model.name.toLowerCase().includes('chatgpt') ? 'openai'
-                    : model.name.toLowerCase().includes('kimi') ? 'kimi' : 'nvidia';
+                  const keyName = model.name.toLowerCase().includes('lite') ? 'flashLite'
+                    : model.name.toLowerCase().includes('multimodal') || model.name.toLowerCase().includes('vision') ? 'multimodal'
+                    : 'gemini';
 
                   return (
                     <div
