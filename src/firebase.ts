@@ -10,6 +10,7 @@ import {
 import { 
   getFirestore, 
   initializeFirestore,
+  setLogLevel,
   collection, 
   doc, 
   setDoc, 
@@ -26,6 +27,13 @@ import firebaseConfig from '../firebase-applet-config.json';
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+// Silence verbose SDK network retry notices in iframe environments
+try {
+  setLogLevel('error');
+} catch (e) {
+  // ignore
+}
 
 // Initialize Firestore with force long polling and ignore undefined properties
 // to ensure seamless, error-free connectivity in iframe sandboxes.

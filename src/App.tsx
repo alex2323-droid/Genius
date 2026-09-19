@@ -11,11 +11,13 @@ import {
   Printer,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   FileCheck,
   Flame,
   Check,
   Timer,
-  MessageSquarePlus
+  MessageSquarePlus,
+  Trophy
 } from 'lucide-react';
 import { 
   auth, 
@@ -50,6 +52,7 @@ import { AchievementsModal } from './components/AchievementsModal.tsx';
 import { AdminLogoModal } from './components/AdminLogoModal.tsx';
 import { FeedbackModal } from './components/FeedbackModal.tsx';
 import { ProfileModal } from './components/ProfileModal.tsx';
+import { AICompetitionModal } from './components/AICompetitionModal.tsx';
 import { BottomNav } from './components/BottomNav.tsx';
 import { useCustomLogo } from './utils/logoStorage.ts';
 import { checkNewAchievements, getPlanAchievements } from './utils/achievementManager.ts';
@@ -195,6 +198,7 @@ export function normalizeStudyPlan(raw: any): StudyPlan {
     updatedAt: raw.updatedAt || new Date().toISOString(),
     providerUsed: raw.providerUsed || '',
     providerId: raw.providerId || 'gemini',
+    aiCompetitionResult: raw.aiCompetitionResult || undefined,
   };
 
   return planObj;
@@ -204,7 +208,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [plans, setPlans] = useState<StudyPlan[]>([]);
   const [activePlan, setActivePlan] = useState<StudyPlan | null>(null);
-  const [activeTab, setActiveTab] = useState<'schedule' | 'guide' | 'flashcards' | 'exercises'>('schedule');
+  const [activeTab, setActiveTab] = useState<'schedule' | 'guide' | 'flashcards' | 'exercises' | 'traps'>('schedule');
   const [selectedStudyDay, setSelectedStudyDay] = useState<number | 'all'>('all');
   const [isCreating, setIsCreating] = useState<boolean>(true);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -212,6 +216,9 @@ export default function App() {
   const [isTutorOpen, setIsTutorOpen] = useState<boolean>(false);
   const [tutorTopic, setTutorTopic] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // AI Competition Modal State
+  const [isAICompetitionModalOpen, setIsAICompetitionModalOpen] = useState<boolean>(false);
 
   // Focus / Study Session Mode
   const [isStudySessionMode, setIsStudySessionMode] = useState<boolean>(false);
@@ -454,7 +461,7 @@ export default function App() {
     setIsTutorOpen(true);
   };
 
-  const handleNavigateTab = (tab: 'schedule' | 'guide' | 'flashcards' | 'exercises', dayNumber?: number) => {
+  const handleNavigateTab = (tab: 'schedule' | 'guide' | 'flashcards' | 'exercises' | 'traps', dayNumber?: number) => {
     if (typeof dayNumber === 'number') {
       setSelectedStudyDay(dayNumber);
     }
@@ -579,6 +586,17 @@ export default function App() {
                     <span>Modo Sesión</span>
                   </button>
 
+                  {/* Torneo Multi-IA Competition Audit Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsAICompetitionModalOpen(true)}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[40px] text-xs font-bold text-amber-900 dark:text-amber-200 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/70 dark:hover:bg-amber-900/80 border border-amber-300 dark:border-amber-800 rounded-xl active:scale-95 transition-all cursor-pointer shadow-2xs"
+                    title="Ver auditoría y resultados de la competición entre las inteligencias artificiales"
+                  >
+                    <Trophy className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>Torneo IA ({activePlan.aiCompetitionResult?.score || 99}/100)</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => handleAskTutor(activePlan.subject)}
@@ -649,44 +667,9 @@ export default function App() {
               )}
             </div>
 
-            {/* Navigation Tabs Bar */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-1.5 flex items-center gap-1.5 overflow-x-auto shadow-2xs transition-colors scrollbar-none">
-              {[
-                { id: 'schedule', label: 'Cronograma', icon: Calendar, badge: `${activePlan.daysLeft}d` },
-                { id: 'guide', label: 'Guía y Fórmulas', icon: BookOpen, badge: `${(activePlan.studyGuide?.coreConcepts || []).length}` },
-                { id: 'flashcards', label: 'Flashcards', icon: Layers, badge: `${(activePlan.studyGuide?.flashcards || []).length}` },
-                { id: 'exercises', label: 'Ejercicios', icon: HelpCircle, badge: `${(activePlan.exercises || []).length}` },
-              ].map(tab => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    id={`tab-${tab.id}`}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex-1 min-w-[130px] sm:min-w-[150px] min-h-[44px] flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
-                      isActive
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span>{tab.label}</span>
-                    <span
-                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        isActive ? 'bg-blue-700 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-                      }`}
-                    >
-                      {tab.badge}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Active Tab View */}
-            <div>
+            {/* Active Tab Views & Navigation Bar */}
+            <div className="space-y-6">
+              {/* 1. Cronograma de Estudio (rendered at the top) */}
               {activeTab === 'schedule' && (
                 <StudyScheduleView
                   plan={activePlan}
@@ -699,38 +682,91 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'guide' && (
-                <StudyGuideView
-                  plan={activePlan}
-                  selectedDayNumber={selectedStudyDay}
-                  onSelectDay={setSelectedStudyDay}
-                  onAskTutor={handleAskTutor}
-                  onNavigateTab={handleNavigateTab}
-                  onUpdatePlan={handleUpdatePlan}
-                />
-              )}
+              {/* 2. Navigation Tabs Bar (Placed BELOW Cronograma de Estudio) */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-1.5 flex items-center gap-1.5 overflow-x-auto shadow-2xs transition-colors scrollbar-none sticky top-2 z-20">
+                {[
+                  { id: 'schedule', label: 'Cronograma', icon: Calendar, badge: `${activePlan.daysLeft}d` },
+                  { id: 'guide', label: 'Guía y Conceptos', icon: BookOpen, badge: `${(activePlan.studyGuide?.coreConcepts || []).length}` },
+                  { id: 'flashcards', label: 'Tarjetas de Memoria', icon: Layers, badge: `${(activePlan.studyGuide?.flashcards || []).length}` },
+                  { id: 'exercises', label: 'Ejercicios y Exámenes', icon: HelpCircle, badge: `${(activePlan.exercises || []).length}` },
+                  { id: 'traps', label: 'Trampas de Examen', icon: AlertTriangle, badge: `${(activePlan.studyGuide?.commonExamTraps || []).length}` },
+                ].map(tab => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      id={`tab-${tab.id}`}
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={`flex-1 min-w-[130px] sm:min-w-[150px] min-h-[44px] flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
+                        isActive
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span>{tab.label}</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          isActive ? 'bg-blue-700 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                        }`}
+                      >
+                        {tab.badge}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
 
-              {activeTab === 'flashcards' && (
-                <FlashcardsView
-                  flashcards={activePlan.studyGuide?.flashcards || []}
-                  schedule={activePlan.schedule || []}
-                  selectedDayNumber={selectedStudyDay}
-                  onSelectDay={setSelectedStudyDay}
-                  plan={activePlan}
-                  onUpdatePlan={handleUpdatePlan}
-                  onNavigateTab={handleNavigateTab}
-                />
-              )}
+              {/* 3. Selected Module Views */}
+              <div>
+                {activeTab === 'guide' && (
+                  <StudyGuideView
+                    plan={activePlan}
+                    selectedDayNumber={selectedStudyDay}
+                    onSelectDay={setSelectedStudyDay}
+                    onAskTutor={handleAskTutor}
+                    onNavigateTab={handleNavigateTab}
+                    onUpdatePlan={handleUpdatePlan}
+                    initialCategory="concepts"
+                  />
+                )}
 
-              {activeTab === 'exercises' && (
-                <ExercisesView
-                  plan={activePlan}
-                  selectedDayNumber={selectedStudyDay}
-                  onSelectDay={setSelectedStudyDay}
-                  onNavigateTab={handleNavigateTab}
-                  onUpdatePlan={handleUpdatePlan}
-                />
-              )}
+                {activeTab === 'traps' && (
+                  <StudyGuideView
+                    plan={activePlan}
+                    selectedDayNumber={selectedStudyDay}
+                    onSelectDay={setSelectedStudyDay}
+                    onAskTutor={handleAskTutor}
+                    onNavigateTab={handleNavigateTab}
+                    onUpdatePlan={handleUpdatePlan}
+                    initialCategory="traps"
+                  />
+                )}
+
+                {activeTab === 'flashcards' && (
+                  <FlashcardsView
+                    flashcards={activePlan.studyGuide?.flashcards || []}
+                    schedule={activePlan.schedule || []}
+                    selectedDayNumber={selectedStudyDay}
+                    onSelectDay={setSelectedStudyDay}
+                    plan={activePlan}
+                    onUpdatePlan={handleUpdatePlan}
+                    onNavigateTab={handleNavigateTab}
+                  />
+                )}
+
+                {activeTab === 'exercises' && (
+                  <ExercisesView
+                    plan={activePlan}
+                    selectedDayNumber={selectedStudyDay}
+                    onSelectDay={setSelectedStudyDay}
+                    onNavigateTab={handleNavigateTab}
+                    onUpdatePlan={handleUpdatePlan}
+                  />
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -771,11 +807,16 @@ export default function App() {
         context={activePlan ? `${activePlan.subject} - ${activePlan.strategySummary}` : ''}
       />
 
-      {/* Admin Logo Config Modal */}
+      {/* Admin Panel & QA Agent Modal */}
       <AdminLogoModal
         isOpen={isAdminModalOpen}
         onClose={() => setIsAdminModalOpen(false)}
         currentUserEmail={user?.email || 'alexparababi23@gmail.com'}
+        onInjectTestPlan={(plan) => {
+          setActivePlan(plan);
+          setIsCreating(false);
+          setSelectedStudyDay('all');
+        }}
       />
 
       {/* Community Suggestions & Feedback Modal */}
@@ -792,6 +833,13 @@ export default function App() {
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
         userEmail={user?.email}
+      />
+
+      {/* AI Multi-Model Competition Audit Modal */}
+      <AICompetitionModal
+        isOpen={isAICompetitionModalOpen}
+        onClose={() => setIsAICompetitionModalOpen(false)}
+        competitionResult={activePlan?.aiCompetitionResult}
       />
 
       {/* Smartphone Animated 5-Tab Bottom Navigation Bar */}
@@ -836,10 +884,6 @@ export default function App() {
             >
               💬 Dejar Opinión o Sugerencia
             </button>
-            <span className="text-slate-300 dark:text-slate-700">•</span>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Adaptado para Smartphone, Tablet y PC
-            </p>
           </div>
         </div>
       </footer>

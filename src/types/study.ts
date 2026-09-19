@@ -104,10 +104,27 @@ export interface StudyPlan {
   updatedAt: string;
   providerUsed?: string;
   providerId?: string;
+  aiCompetitionResult?: AICompetitionResult;
+}
+
+export interface CompetingAIModel {
+  name: string;
+  score: number;
+  status: string;
+  badge: string;
+  strengths: string[];
+}
+
+export interface AICompetitionResult {
+  winnerModel: string;
+  score: number;
+  evaluationSummary: string;
+  competingModels: CompetingAIModel[];
+  evaluatedAt: string;
 }
 
 export interface AIProviderInfo {
-  id: 'gemini' | 'openai' | 'kimi' | 'nvidia';
+  id: 'gemini' | 'claude' | 'openai' | 'kimi' | 'nvidia';
   name: string;
   configured: boolean;
   model: string;

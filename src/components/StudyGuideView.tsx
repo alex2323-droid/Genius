@@ -39,8 +39,9 @@ interface StudyGuideViewProps {
   selectedDayNumber?: number | 'all';
   onSelectDay?: (dayNumber: number | 'all') => void;
   onAskTutor: (topic: string) => void;
-  onNavigateTab?: (tab: 'schedule' | 'guide' | 'flashcards' | 'exercises', dayNumber?: number) => void;
+  onNavigateTab?: (tab: 'schedule' | 'guide' | 'flashcards' | 'exercises' | 'traps', dayNumber?: number) => void;
   onUpdatePlan?: (updatedPlan: StudyPlan) => void;
+  initialCategory?: 'all' | 'concepts' | 'formulas' | 'traps';
 }
 
 export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
@@ -50,10 +51,18 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
   onAskTutor,
   onNavigateTab,
   onUpdatePlan,
+  initialCategory = 'all',
 }) => {
   const [copied, setCopied] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
-  const [activeCategory, setActiveCategory] = useState<'all' | 'concepts' | 'formulas' | 'traps'>('all');
+  const [activeCategory, setActiveCategory] = useState<'all' | 'concepts' | 'formulas' | 'traps'>(initialCategory);
+
+  // Sync activeCategory if initialCategory changes
+  React.useEffect(() => {
+    if (initialCategory) {
+      setActiveCategory(initialCategory);
+    }
+  }, [initialCategory]);
   const [trapFilterStatus, setTrapFilterStatus] = useState<'all' | 'pending' | 'mastered'>('all');
   const [masteredTrapIndices, setMasteredTrapIndices] = useState<number[]>([]);
   
@@ -589,9 +598,51 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
                       </button>
                     </div>
 
-                    <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                      {concept.explanation}
-                    </p>
+                    {/* Structured, formatted concept explanation */}
+                    <div className="space-y-2.5 text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed mt-2">
+                      {concept.explanation ? (
+                        concept.explanation.split('\n').map((paragraph, pIdx) => {
+                          const trimmed = paragraph.trim();
+                          if (!trimmed) return null;
+
+                          // Format lines starting with emojis, bullets or section headers
+                          const colonIdx = trimmed.indexOf(':');
+                          if (colonIdx > 0 && colonIdx < 45 && (
+                            trimmed.startsWith('📌') || 
+                            trimmed.startsWith('⚙️') || 
+                            trimmed.startsWith('💡') || 
+                            trimmed.startsWith('⚠️') || 
+                            trimmed.startsWith('•') ||
+                            trimmed.startsWith('Definición') ||
+                            trimmed.startsWith('Mecanismo')
+                          )) {
+                            const headerTitle = trimmed.slice(0, colonIdx + 1).trim();
+                            const bodyContent = trimmed.slice(colonIdx + 1).trim();
+                            return (
+                              <div 
+                                key={pIdx} 
+                                className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 transition-colors"
+                              >
+                                <span className="font-extrabold text-slate-900 dark:text-slate-100 block mb-1">
+                                  {headerTitle}
+                                </span>
+                                <span className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                                  {bodyContent}
+                                </span>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <p key={pIdx} className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                              {trimmed}
+                            </p>
+                          );
+                        })
+                      ) : (
+                        <p className="text-slate-500 italic">Sin explicación detallada disponible.</p>
+                      )}
+                    </div>
 
                     {concept.exampleOrFormula && (
                       <div className="mt-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs">

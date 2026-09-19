@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-export type AIProviderId = 'gemini' | 'openai' | 'kimi' | 'nvidia';
+export type AIProviderId = 'gemini' | 'claude' | 'openai' | 'kimi' | 'nvidia';
 
 export interface ProviderStatus {
   id: AIProviderId;
@@ -37,9 +37,16 @@ export function getProvidersStatus(): ProviderStatus[] {
       id: 'gemini',
       name: 'Google Gemini',
       configured: Boolean(process.env.GEMINI_API_KEY),
-      model: 'gemini-3.1-flash-lite / gemini-3.8-flash',
+      model: 'gemini-3.8-flash / gemini-3.1-flash-lite',
       description: 'Motor nativo ultrarrápido con lectura multimodal de documentos y PDF.',
       isPrimary: true,
+    },
+    {
+      id: 'claude',
+      name: 'Anthropic Claude',
+      configured: Boolean(process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY),
+      model: 'claude-3-5-sonnet-latest',
+      description: 'Lógica pedagógica avanzada, síntesis conceptual profunda y análisis estructurado.',
     },
     {
       id: 'openai',
@@ -59,7 +66,7 @@ export function getProvidersStatus(): ProviderStatus[] {
       id: 'nvidia',
       name: 'NVIDIA AI (NIM)',
       configured: Boolean(process.env.NVIDIA_API_KEY),
-      model: 'meta/llama-3.3-70b-instruct',
+      model: 'meta/llama-3.1-70b-instruct',
       description: 'Inferencia acelerada para razonamiento paso a paso y resolución de ejercicios.',
     },
   ];
@@ -72,24 +79,84 @@ export function cleanAndParseJson<T = any>(rawText: string): T {
 
   let cleaned = rawText.trim();
   // Strip markdown code fences if wrapped
-  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  cleaned = cleaned.replace(/```(?:json)?/gi, '').trim();
 
-  // Find first '{' or '[' and last '}' or ']'
+  // Find start and end of JSON payload
   const firstBrace = cleaned.indexOf('{');
   const firstBracket = cleaned.indexOf('[');
-  const startIdx = firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket) 
-    ? firstBrace 
-    : firstBracket;
+  let startIdx = -1;
+  if (firstBrace !== -1 && firstBracket !== -1) {
+    startIdx = Math.min(firstBrace, firstBracket);
+  } else if (firstBrace !== -1) {
+    startIdx = firstBrace;
+  } else if (firstBracket !== -1) {
+    startIdx = firstBracket;
+  }
 
   const lastBrace = cleaned.lastIndexOf('}');
   const lastBracket = cleaned.lastIndexOf(']');
-  const endIdx = Math.max(lastBrace, lastBracket);
+  let endIdx = Math.max(lastBrace, lastBracket);
 
-  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-    cleaned = cleaned.slice(startIdx, endIdx + 1);
+  if (startIdx !== -1) {
+    if (endIdx > startIdx) {
+      cleaned = cleaned.slice(startIdx, endIdx + 1);
+    } else {
+      cleaned = cleaned.slice(startIdx);
+    }
   }
 
-  return JSON.parse(cleaned) as T;
+  // Remove trailing commas before closing brackets or braces
+  cleaned = cleaned.replace(/,\s*([\}\]])/g, '$1');
+
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch (firstErr) {
+    // Attempt auto-repair for truncated JSON objects
+    let openBraces = 0;
+    let openBrackets = 0;
+    let inString = false;
+    let isEscaped = false;
+
+    for (let i = 0; i < cleaned.length; i++) {
+      const char = cleaned[i];
+      if (isEscaped) {
+        isEscaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        isEscaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char === '{') openBraces++;
+        if (char === '}') openBraces = Math.max(0, openBraces - 1);
+        if (char === '[') openBrackets++;
+        if (char === ']') openBrackets = Math.max(0, openBrackets - 1);
+      }
+    }
+
+    let repaired = cleaned;
+    if (inString) repaired += '"';
+    repaired = repaired.replace(/,\s*$/, '');
+    while (openBrackets > 0) {
+      repaired += ']';
+      openBrackets--;
+    }
+    while (openBraces > 0) {
+      repaired += '}';
+      openBraces--;
+    }
+
+    try {
+      return JSON.parse(repaired) as T;
+    } catch {
+      throw firstErr;
+    }
+  }
 }
 
 function extractApiErrorMessage(status: number, rawText: string): string {
@@ -114,7 +181,7 @@ async function callGemini(params: {
 }): Promise<string> {
   const ai = getGeminiClient();
   // Valid, supported models ordered for maximum availability and reliability
-  const models = ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest'];
+  const models = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
   let lastErr: any = null;
 
   const contents: any[] = [];
@@ -160,6 +227,72 @@ async function callGemini(params: {
   }
 
   throw lastErr || new Error('Google Gemini no pudo completar la solicitud.');
+}
+
+// 2. Anthropic Claude Runner (Claude 3.5 Sonnet / Haiku)
+async function callClaude(params: {
+  prompt: string;
+  isJson?: boolean;
+  systemPrompt?: string;
+}): Promise<string> {
+  const apiKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error('CLAUDE_API_KEY / ANTHROPIC_API_KEY no configurada.');
+  }
+
+  const models = [
+    'claude-3-5-sonnet-latest',
+    'claude-3-5-sonnet-20241022',
+    'claude-3-5-haiku-latest',
+    'claude-3-haiku-20240307',
+  ];
+
+  let lastErr: any = null;
+
+  for (const model of models) {
+    try {
+      console.info(`[Multi-AI: Claude] Consultando modelo ${model}...`);
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 4096,
+          system: params.systemPrompt || (params.isJson
+            ? 'Eres un tutor académico de élite. Responde exclusivamente con un objeto JSON estructurado, válido y parseable.'
+            : 'Eres un tutor pedagógico de élite. Responde en Markdown claro.'),
+          messages: [
+            { role: 'user', content: params.prompt }
+          ],
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data?.content?.[0]?.text;
+        if (text) return text;
+      } else {
+        const rawError = await res.text();
+        const apiErrMsg = extractApiErrorMessage(res.status, rawError);
+        lastErr = new Error(`Claude API error: ${apiErrMsg}`);
+        
+        // Account-level errors (insufficient credits, invalid auth) fail fast across models
+        const isAccountError = res.status === 400 || res.status === 401 || res.status === 429 || rawError.includes('credit balance');
+        if (isAccountError) {
+          console.warn(`[Multi-AI: Claude] Error de cuenta/saldo en Claude (${res.status}). Conmutando inmediatamente a Google Gemini...`);
+          break;
+        }
+      }
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+
+  throw lastErr || new Error('Anthropic Claude no estuvo disponible.');
 }
 
 // 2. OpenAI Runner (ChatGPT / GPT-4o-mini)
@@ -266,40 +399,53 @@ async function callNvidia(params: {
     throw new Error('NVIDIA_API_KEY no configurada.');
   }
 
-  console.info('[Multi-AI: NVIDIA] Consultando modelo meta/llama-3.3-70b-instruct...');
-  const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'meta/llama-3.3-70b-instruct',
-      messages: [
-        {
-          role: 'system',
-          content: params.systemPrompt || (params.isJson
-            ? 'Eres un tutor académico de élite. Responde exclusivamente con código JSON estructurado y válido.'
-            : 'Eres un tutor académico experto. Responde en Markdown claro.'),
+  const models = [
+    'meta/llama-3.1-70b-instruct',
+    'nvidia/llama-3.1-nemotron-70b-instruct',
+    'meta/llama3-70b-instruct',
+  ];
+
+  let lastErr: any = null;
+
+  for (const model of models) {
+    try {
+      console.info(`[Multi-AI: NVIDIA] Consultando modelo ${model}...`);
+      const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
         },
-        { role: 'user', content: params.prompt },
-      ],
-      temperature: 0.2,
-      max_tokens: 4096,
-    }),
-  });
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'system',
+              content: params.systemPrompt || (params.isJson
+                ? 'Eres un tutor académico de élite. Responde exclusivamente con código JSON estructurado y válido.'
+                : 'Eres un tutor académico experto. Responde en Markdown claro.'),
+            },
+            { role: 'user', content: params.prompt },
+          ],
+          temperature: 0.2,
+          max_tokens: 4096,
+        }),
+      });
 
-  if (!res.ok) {
-    const rawError = await res.text();
-    throw new Error(`NVIDIA API error: ${extractApiErrorMessage(res.status, rawError)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const content = data?.choices?.[0]?.message?.content;
+        if (content) return content;
+      } else {
+        const rawError = await res.text();
+        lastErr = new Error(`NVIDIA API error: ${extractApiErrorMessage(res.status, rawError)}`);
+      }
+    } catch (e) {
+      lastErr = e;
+    }
   }
 
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error('NVIDIA AI no devolvió texto en la respuesta.');
-  }
-  return content;
+  throw lastErr || new Error('NVIDIA AI no estuvo disponible.');
 }
 
 export interface MultiAIExecuteOptions {
@@ -328,7 +474,7 @@ export async function executeMultiAIRequest<T = any>(
   const { prompt, isJson, pdfBase64, systemPrompt, preferredProvider } = options;
 
   // Build ordered list of providers
-  const allProviders: AIProviderId[] = ['gemini', 'openai', 'kimi', 'nvidia'];
+  const allProviders: AIProviderId[] = ['gemini', 'claude', 'openai', 'kimi', 'nvidia'];
   const queue: AIProviderId[] = [];
 
   // If user selected a specific provider, put it first
@@ -351,6 +497,9 @@ export async function executeMultiAIRequest<T = any>(
     if (providerId === 'gemini' && !process.env.GEMINI_API_KEY) {
       continue;
     }
+    if (providerId === 'claude' && !process.env.CLAUDE_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+      continue;
+    }
     if (providerId === 'openai' && !process.env.OPENAI_API_KEY) {
       continue;
     }
@@ -367,6 +516,8 @@ export async function executeMultiAIRequest<T = any>(
 
       if (providerId === 'gemini') {
         rawText = await callGemini({ prompt, pdfBase64, isJson });
+      } else if (providerId === 'claude') {
+        rawText = await callClaude({ prompt, isJson, systemPrompt });
       } else if (providerId === 'openai') {
         rawText = await callOpenAI({ prompt, isJson, systemPrompt });
       } else if (providerId === 'kimi') {
@@ -382,6 +533,7 @@ export async function executeMultiAIRequest<T = any>(
 
       const providerName = 
         providerId === 'gemini' ? 'Google Gemini' :
+        providerId === 'claude' ? 'Anthropic Claude' :
         providerId === 'openai' ? 'OpenAI (ChatGPT)' :
         providerId === 'kimi' ? 'Kimi (Moonshot AI)' : 'NVIDIA AI';
 
