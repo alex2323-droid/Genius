@@ -10,11 +10,17 @@ import {
   Sparkles, 
   CheckCircle2, 
   AlertCircle,
+  AlertTriangle,
   HelpCircle,
   Layers,
-  ArrowRight
+  ArrowRight,
+  ExternalLink
 } from 'lucide-react';
 import { parseUploadedFile, type ParsedFile } from '../utils/fileParser.ts';
+import { ObsoleteFormatModal } from './ObsoleteFormatModal.tsx';
+import { MultiAISelector } from './MultiAISelector.tsx';
+
+import { useCustomLogo } from '../utils/logoStorage.ts';
 
 interface PlanConfiguratorProps {
   onGeneratePlan: (params: {
@@ -24,6 +30,7 @@ interface PlanConfiguratorProps {
     studyHoursPerDay: number;
     files: ParsedFile[];
     customNotes: string;
+    preferredProvider?: string;
   }) => Promise<void>;
   isGenerating: boolean;
 }
@@ -40,10 +47,14 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
   const [targetGrade, setTargetGrade] = useState<number>(85);
   const [studyHoursPerDay, setStudyHoursPerDay] = useState<number>(2);
   const [customNotes, setCustomNotes] = useState('');
+  const [selectedProvider, setSelectedProvider] = useState<string>('auto');
   const [files, setFiles] = useState<ParsedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [obsoleteFilePrompt, setObsoleteFilePrompt] = useState<ParsedFile | null>(null);
+  const [isObsoleteModalOpen, setIsObsoleteModalOpen] = useState(false);
+  const currentLogo = useCustomLogo();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -65,6 +76,13 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
 
     setFiles(prev => [...prev, ...parsedList]);
     setIsParsing(false);
+
+    // Check if any of the newly parsed files is an obsolete format
+    const firstObsolete = parsedList.find(f => f.isObsolete);
+    if (firstObsolete) {
+      setObsoleteFilePrompt(firstObsolete);
+      setIsObsoleteModalOpen(true);
+    }
 
     // Auto-fill subject from first file name if empty
     if (!subject && parsedList.length > 0) {
@@ -140,22 +158,23 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
       studyHoursPerDay,
       files,
       customNotes,
+      preferredProvider: selectedProvider,
     });
   };
 
   // Strategic adaptation guidance
   const getDayStrategy = (days: number) => {
-    if (days <= 2) {
+    if (days <= 3) {
       return {
-        label: 'Modo Emergencia / Salvar Semestre',
+        label: `Modo Intensivo (${days} día${days > 1 ? 's' : ''}) - Guía Extensa de Alto Impacto`,
         color: 'text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900/60',
-        desc: 'Enfoque 80/20 estricto: conceptos críticos de alto rendimiento (High-Yield), fórmulas y trampas seguras de examen.',
+        desc: 'Guía de Estudio Ampliada y Exhaustiva: Al contar con pocos días, la IA genera explicaciones más largas, desgloses profundos paso a paso y la mayor densidad de conceptos, fórmulas y trampas por día para estudiar sin consultar múltiples documentos dispersos.',
       };
     } else if (days <= 7) {
       return {
         label: 'Sprint Intensivo Semanal',
         color: 'text-blue-800 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900/60',
-        desc: 'Distribución equilibrada: asimilación de bloques temáticos, práctica diaria activa y simulacro final.',
+        desc: 'Distribución equilibrada: asimilación de bloques temáticos, guía de estudio rigurosa, práctica diaria activa y simulacro final.',
       };
     } else {
       return {
@@ -169,21 +188,24 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
   const getGradeStrategy = (grade: number) => {
     if (grade >= 90) {
       return {
-        label: 'Sobresaliente / Matrícula (90-100%)',
-        color: 'text-indigo-800 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-900/60',
-        desc: 'Rigor máximo: incluye deducciones detalladas, casos límite poco frecuentes, trampas avanzadas y preguntas de examen complejas.',
+        label: 'Sobresaliente / Excelencia (90-100%) • Nivel Avanzado / Máster',
+        color: 'text-purple-800 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-900/60',
+        desc: 'Exigencia Máxima y Cobertura 100%: Para asegurar nota alta se genera MÁS VOLUMEN de material para abarcar todos los detalles del temario.',
+        volume: '📊 Quota Diaria: 8-12 conceptos clave • 6-10 fórmulas • 6-10 trampas de examen • 8-12 flashcards • 6-10 ejercicios avanzados por día.',
       };
     } else if (grade >= 75) {
       return {
-        label: 'Notable Alto (75-89%)',
-        color: 'text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/60',
-        desc: 'Dominio completo: conceptos centrales sólidos, procedimientos habituales de examen y prevención de descuidos.',
+        label: 'Notable Alto (75-89%) • Nivel Intermedio-Avanzado',
+        color: 'text-indigo-800 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-900/60',
+        desc: 'Dominio Amplio: Cobertura sólida de todos los módulos principales del temario con ejercicios tipo examen real.',
+        volume: '📊 Quota Diaria: 5-8 conceptos clave • 4-6 fórmulas • 4-6 trampas • 6-8 flashcards • 4-6 ejercicios intermedios por día.',
       };
     } else {
       return {
-        label: 'Aprobado Seguro (60-74%)',
-        color: 'text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900/60',
-        desc: 'Estrategia de supervivencia: asegurar los puntos base indispensables que siempre se preguntan.',
+        label: 'Aprobado Seguro (50-74%) • Nivel Esencial / Fundamental',
+        color: 'text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/60',
+        desc: 'Foco en Garantía de Base (Regla 80/20): Módulo sintético enfocado en asegurar los puntos indispensables sin saturar.',
+        volume: '📊 Quota Diaria: 3-5 conceptos núcleo • 3-4 fórmulas • 2-3 trampas indispensables • 4-5 flashcards • 3-4 ejercicios directos por día.',
       };
     }
   };
@@ -195,14 +217,26 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
     <div className="max-w-4xl mx-auto py-4 sm:py-8 px-2 sm:px-6">
       {/* Hero Header */}
       <div className="text-center mb-6 sm:mb-8 px-2">
+        <div className="flex justify-center mb-3 sm:mb-4">
+          <div className="relative group cursor-pointer" onClick={handleLoadSample}>
+            <div className="relative w-24 h-24 sm:w-32 sm:h-32 mx-auto flex items-center justify-center">
+              <img 
+                src={currentLogo} 
+                alt="Genius Logo" 
+                className="w-full h-full object-contain filter drop-shadow-md transform group-hover:scale-105 transition-transform duration-300"
+              />
+            </div>
+          </div>
+        </div>
+
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 mb-2 sm:mb-3 border border-blue-200/60 dark:border-blue-800/60">
-          <Sparkles className="w-3.5 h-3.5" /> Planificador Inteligente de Evaluaciones
+          <Sparkles className="w-3.5 h-3.5 text-blue-500" /> Planificador de Estudio Integral con IA
         </div>
         <h1 className="text-2xl sm:text-4xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-          Sube tus archivos y diseña tu estudio a medida
+          Sube tus archivos y diseña tu estudio a medida con <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 bg-clip-text text-transparent">Genius</span>
         </h1>
         <p className="mt-2 text-xs sm:text-base text-slate-600 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
-          Genera una guía de conceptos clave, cronograma diario y ejercicios de examen calibrados exactamente según los días que te faltan y la nota que quieres sacar.
+          Genera una guía de conceptos clave, cronograma diario, tarjetas de memorización y ejercicios calibrados exactamente según tus días disponibles y nota meta.
         </p>
       </div>
 
@@ -273,6 +307,27 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
             </div>
           </div>
 
+          {/* Clean reading PDF conversion recommendation banner */}
+          <div className="mt-3.5 p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs">
+            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+              <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span>
+                <strong>Lectura limpia y nítida:</strong> Los archivos en <strong>PDF</strong> conservan fórmulas, ecuaciones y diagramas intactos. Si tienes archivos .DOC o .PPT clásicos, conviértelos a PDF para un mejor resultado.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open('https://cloudconvert.com/document-converter', '_blank', 'noopener,noreferrer');
+              }}
+              className="shrink-0 px-3 py-1.5 font-bold text-blue-700 dark:text-blue-300 hover:text-blue-800 dark:hover:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <span>Conversores gratis</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {isParsing && (
             <div className="mt-3 flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
               <div className="w-4 h-4 border-2 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin" />
@@ -297,33 +352,64 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
                 {files.map((file) => (
                   <div
                     key={file.id}
-                    className="flex items-center justify-between p-3 rounded-xl bg-slate-100/80 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700"
+                    className={`flex flex-col justify-between p-3 rounded-xl border transition-all gap-2.5 ${
+                      file.isObsolete
+                        ? 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/70 shadow-2xs'
+                        : 'bg-slate-100/80 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700'
+                    }`}
                   >
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <div className="w-9 h-9 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center shrink-0">
-                        {file.extension.includes('ppt') ? (
-                          <Presentation className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                        ) : (
-                          <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                        )}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <div className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${
+                          file.isObsolete
+                            ? 'bg-amber-100 dark:bg-amber-900/50 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+                            : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600'
+                        }`}>
+                          {file.extension.includes('ppt') ? (
+                            <Presentation className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                          ) : (
+                            <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                          )}
+                        </div>
+                        <div className="overflow-hidden">
+                          <p className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">{file.name}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {(file.size / 1024).toFixed(0)} KB
+                            {file.slideCount ? ` • ${file.slideCount} diapositivas` : ''}
+                            {file.wordCount ? ` • ~${file.wordCount} palabras` : ''}
+                          </p>
+                        </div>
                       </div>
-                      <div className="overflow-hidden">
-                        <p className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">{file.name}</p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {(file.size / 1024).toFixed(0)} KB
-                          {file.slideCount ? ` • ${file.slideCount} diapositivas` : ''}
-                          {file.wordCount ? ` • ~${file.wordCount} palabras` : ''}
-                        </p>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(file.id)}
+                        className="text-slate-400 hover:text-red-600 dark:hover:text-red-400 p-1.5 rounded-md hover:bg-white dark:hover:bg-slate-700 transition-colors cursor-pointer shrink-0"
+                        title="Eliminar archivo"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removeFile(file.id)}
-                      className="text-slate-400 hover:text-red-600 dark:hover:text-red-400 p-1.5 rounded-md hover:bg-white dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                      title="Eliminar archivo"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+
+                    {/* Obsolete format conversion callout */}
+                    {file.isObsolete && (
+                      <div className="pt-2 border-t border-amber-200/80 dark:border-amber-900/50 flex items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span>Formato .{file.extension.toUpperCase()} clásico</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setObsoleteFilePrompt(file);
+                            setIsObsoleteModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 min-h-[32px] text-[11px] font-bold text-blue-700 dark:text-blue-300 bg-blue-100/70 hover:bg-blue-200/80 dark:bg-blue-950/80 dark:hover:bg-blue-900 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <span>Convertir a PDF</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -450,9 +536,10 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
               </div>
 
               {/* Dynamic grade strategy insight */}
-              <div className={`mt-3 p-2.5 rounded-lg border text-xs ${gradeStrategy.color}`}>
-                <p className="font-semibold">{gradeStrategy.label}</p>
-                <p className="mt-0.5 opacity-90">{gradeStrategy.desc}</p>
+              <div className={`mt-3 p-3 rounded-xl border text-xs space-y-1 ${gradeStrategy.color}`}>
+                <p className="font-bold">{gradeStrategy.label}</p>
+                <p className="opacity-90 leading-relaxed">{gradeStrategy.desc}</p>
+                <p className="font-semibold text-[11px] pt-1 border-t border-current/20 opacity-95">{gradeStrategy.volume}</p>
               </div>
             </div>
 
@@ -499,6 +586,13 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
           </div>
         </div>
 
+        {/* Multi-AI Resilience & Redundancy Selector */}
+        <MultiAISelector
+          selectedProvider={selectedProvider}
+          onSelectProvider={setSelectedProvider}
+          disabled={isGenerating}
+        />
+
         {/* Submit Button */}
         <div className="flex flex-col items-center gap-3">
           <button
@@ -525,6 +619,21 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
           </p>
         </div>
       </form>
+
+      {/* Obsolete format detection modal */}
+      <ObsoleteFormatModal
+        file={obsoleteFilePrompt}
+        isOpen={isObsoleteModalOpen}
+        onClose={() => setIsObsoleteModalOpen(false)}
+        onRemoveAndReplace={(fileId) => {
+          removeFile(fileId);
+          setIsObsoleteModalOpen(false);
+          // Focus or prompt to select the converted PDF
+          setTimeout(() => {
+            fileInputRef.current?.click();
+          }, 300);
+        }}
+      />
     </div>
   );
 };

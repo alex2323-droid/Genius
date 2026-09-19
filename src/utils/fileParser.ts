@@ -1,6 +1,13 @@
 import JSZip from 'jszip';
 import mammoth from 'mammoth';
 
+export interface ConverterLink {
+  name: string;
+  url: string;
+  description: string;
+  recommended?: boolean;
+}
+
 export interface ParsedFile {
   id: string;
   name: string;
@@ -11,6 +18,97 @@ export interface ParsedFile {
   base64?: string;
   slideCount?: number;
   wordCount?: number;
+  isObsolete?: boolean;
+  obsoleteReason?: string;
+}
+
+export const OBSOLETE_EXTENSIONS = ['doc', 'ppt', 'xls', 'rtf', 'odt', 'odp', 'ods', 'wps', 'pages', 'key'];
+
+export function isObsoleteFormat(extension: string): boolean {
+  return OBSOLETE_EXTENSIONS.includes(extension.toLowerCase());
+}
+
+export function getConverterLinks(extension: string): ConverterLink[] {
+  const ext = extension.toLowerCase();
+
+  if (ext === 'doc') {
+    return [
+      {
+        name: 'CloudConvert',
+        url: 'https://cloudconvert.com/doc-to-pdf',
+        description: 'Conversor gratuito de Word antiguo (.doc) a PDF sin límite restrictivo de tamaño',
+        recommended: true,
+      },
+      {
+        name: 'PDF Pequeño (Smallpdf)',
+        url: 'https://smallpdf.com/es/word-a-pdf',
+        description: 'Herramienta rápida y gratuita para transformar documentos DOC a PDF al instante',
+      },
+    ];
+  }
+
+  if (ext === 'ppt') {
+    return [
+      {
+        name: 'CloudConvert',
+        url: 'https://cloudconvert.com/ppt-to-pdf',
+        description: 'Conversor gratuito de presentaciones PowerPoint (.ppt) a PDF con nitidez total',
+        recommended: true,
+      },
+      {
+        name: 'PDF Pequeño (Smallpdf)',
+        url: 'https://smallpdf.com/es/ppt-a-pdf',
+        description: 'Convierte tus diapositivas de PowerPoint a PDF de forma limpia y rápida',
+      },
+    ];
+  }
+
+  if (ext === 'rtf') {
+    return [
+      {
+        name: 'CloudConvert',
+        url: 'https://cloudconvert.com/rtf-to-pdf',
+        description: 'Convierte archivos RTF a formato PDF limpio de forma gratuita',
+        recommended: true,
+      },
+      {
+        name: 'PDF Pequeño (Smallpdf)',
+        url: 'https://smallpdf.com/es',
+        description: 'Herramienta en línea gratuita para procesar y optimizar tus documentos a PDF',
+      },
+    ];
+  }
+
+  if (ext === 'odt' || ext === 'odp' || ext === 'ods') {
+    return [
+      {
+        name: 'CloudConvert',
+        url: `https://cloudconvert.com/${ext}-to-pdf`,
+        description: `Convierte archivos OpenDocument (.${ext}) a PDF con fidelidad y gratis`,
+        recommended: true,
+      },
+      {
+        name: 'PDF Pequeño (Smallpdf)',
+        url: 'https://smallpdf.com/es',
+        description: 'Herramienta en línea gratuita para transformar tus documentos a PDF',
+      },
+    ];
+  }
+
+  // Fallback general converter (CloudConvert and PDF Pequeño)
+  return [
+    {
+      name: 'CloudConvert',
+      url: 'https://cloudconvert.com/document-converter',
+      description: 'Conversor universal en la nube, gratuito y compatible con más de 200 formatos a PDF',
+      recommended: true,
+    },
+    {
+      name: 'PDF Pequeño (Smallpdf)',
+      url: 'https://smallpdf.com/es',
+      description: 'Suite en línea gratuita para convertir y optimizar archivos a formato PDF limpio',
+    },
+  ];
 }
 
 export async function parseUploadedFile(file: File): Promise<ParsedFile> {
@@ -94,6 +192,18 @@ export async function parseUploadedFile(file: File): Promise<ParsedFile> {
 
   const wordCount = extractedText.trim() ? extractedText.trim().split(/\s+/).length : 0;
 
+  const isObsolete = isObsoleteFormat(extension);
+  let obsoleteReason: string | undefined = undefined;
+  if (isObsolete) {
+    if (extension === 'doc') {
+      obsoleteReason = 'Formato Word binario antiguo (97-2003). Puede omitir fórmulas o esquemas.';
+    } else if (extension === 'ppt') {
+      obsoleteReason = 'Formato PowerPoint binario antiguo (97-2003). Convierte a PDF para conservar gráficos vectoriales.';
+    } else {
+      obsoleteReason = `Formato .${extension.toUpperCase()} clásico. Recomendamos convertir a PDF para máxima precisión de la IA.`;
+    }
+  }
+
   return {
     id,
     name: file.name,
@@ -104,6 +214,8 @@ export async function parseUploadedFile(file: File): Promise<ParsedFile> {
     base64,
     slideCount,
     wordCount,
+    isObsolete,
+    obsoleteReason,
   };
 }
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Send, Lightbulb, BookOpen, MessageSquare } from 'lucide-react';
+import { useCustomLogo } from '../utils/logoStorage.ts';
 
 interface AITutorModalProps {
   isOpen: boolean;
@@ -17,6 +18,8 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
   const [topic, setTopic] = useState(initialTopic);
   const [loading, setLoading] = useState(false);
   const [explanation, setExplanation] = useState<string | null>(null);
+  const [providerUsed, setProviderUsed] = useState<string | null>(null);
+  const currentLogo = useCustomLogo();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,6 +34,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
     setLoading(true);
     setError(null);
     setExplanation(null);
+    setProviderUsed(null);
 
     try {
       const res = await fetch('/api/explain-topic', {
@@ -44,6 +48,7 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
       const data = await res.json();
       if (data.success && data.explanation) {
         setExplanation(data.explanation);
+        setProviderUsed(data.providerUsed || 'Google Gemini');
       } else {
         setError(data.error || 'No se pudo generar la explicación.');
       }
@@ -62,12 +67,16 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
         {/* Modal Header */}
         <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-              <Sparkles className="w-4 h-4" />
+            <div className="relative w-8 h-8 shrink-0 flex items-center justify-center">
+              <img 
+                src={currentLogo} 
+                alt="Tutor Genius" 
+                className="w-full h-full object-contain filter drop-shadow-xs"
+              />
             </div>
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">Tutor Académico IA</h3>
-              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Explicaciones claras y analogías</p>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">Tutor Académico Genius IA</h3>
+              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Explicaciones claras, ejemplos y analogías paso a paso</p>
             </div>
           </div>
           <button
@@ -127,8 +136,16 @@ export const AITutorModal: React.FC<AITutorModalProps> = ({
           {/* Explanation content */}
           {explanation && !loading && (
             <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-3 text-sm text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">
-                <Lightbulb className="w-4 h-4" /> Explicación Didáctica
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">
+                  <Lightbulb className="w-4 h-4" /> Explicación Didáctica
+                </div>
+                {providerUsed && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                    <span>Resuelto por: {providerUsed}</span>
+                  </span>
+                )}
               </div>
               <div className="prose prose-sm max-w-none text-slate-800 dark:text-slate-200">
                 {explanation}

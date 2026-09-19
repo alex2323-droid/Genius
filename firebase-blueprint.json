@@ -57,6 +57,24 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "userId", "studyPlanId", "score", "totalQuestions", "createdAt"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "User suggestions, ratings, and site reviews",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "rating": { "type": "number" },
+        "category": { "type": "string" },
+        "comment": { "type": "string" },
+        "likes": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "rating", "category", "comment", "createdAt"]
     }
   },
   "firestore": {
@@ -71,6 +89,10 @@
     "/quizAttempts/{attemptId}": {
       "entity": "QuizAttempt",
       "description": "Quiz attempts by students"
+    },
+    "/feedback/{feedbackId}": {
+      "entity": "Feedback",
+      "description": "User suggestions and site reviews"
     }
   }
 }

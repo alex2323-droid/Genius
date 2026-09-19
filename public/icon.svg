@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="pwa-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="50%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <!-- Background with rounded squircles -->
+  <rect width="512" height="512" rx="112" fill="url(#pwa-grad)" />
+  <!-- Graduation / Study Icon with Sparkle -->
+  <g transform="translate(64, 64)" stroke="#ffffff" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Book open -->
+    <path d="M40 300 C 120 280, 160 280, 192 310 C 224 280, 264 280, 344 300 L 344 110 C 264 90, 224 90, 192 120 C 160 90, 120 90, 40 110 Z" fill="#ffffff" fill-opacity="0.15" stroke="#ffffff" stroke-width="24" />
+    <line x1="192" y1="120" x2="192" y2="310" stroke="#ffffff" stroke-width="24" />
+    <!-- Graduation Cap / Spark -->
+    <path d="M192 30 L 300 80 L 192 130 L 84 80 Z" fill="#ffffff" fill-opacity="0.9" />
+    <path d="M260 100 L 260 180 C 260 200, 230 220, 192 220 C 154 220, 124 200, 124 180 L 124 100" stroke="#ffffff" stroke-width="16" />
+    <circle cx="300" cy="140" r="14" fill="#facc15" stroke="#facc15" />
+    <!-- Floating Sparkles -->
+    <path d="M330 30 L 340 50 L 360 60 L 340 70 L 330 90 L 320 70 L 300 60 L 320 50 Z" fill="#facc15" stroke="none" />
+  </g>
+</svg>

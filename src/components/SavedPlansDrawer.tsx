@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, FolderKanban, Trash2, Calendar, Target, Clock, ArrowRight, BookOpen } from 'lucide-react';
+import { useCustomLogo } from '../utils/logoStorage.ts';
 import type { StudyPlan } from '../types/study.ts';
 
 interface SavedPlansDrawerProps {
@@ -19,7 +20,10 @@ export const SavedPlansDrawer: React.FC<SavedPlansDrawerProps> = ({
   onSelectPlan,
   onDeletePlan,
 }) => {
+  const currentLogo = useCustomLogo();
   if (!isOpen) return null;
+
+  const safePlans = Array.isArray(plans) ? plans : [];
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs">
@@ -27,12 +31,16 @@ export const SavedPlansDrawer: React.FC<SavedPlansDrawerProps> = ({
         {/* Drawer Header */}
         <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0">
-              <FolderKanban className="w-4 h-4" />
+            <div className="relative w-8 h-8 shrink-0 flex items-center justify-center">
+              <img 
+                src={currentLogo} 
+                alt="Genius" 
+                className="w-full h-full object-contain filter drop-shadow-xs"
+              />
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Mis Planes de Estudio</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{plans.length} planes guardados</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{safePlans.length} planes guardados en Genius</p>
             </div>
           </div>
           <button
@@ -47,14 +55,14 @@ export const SavedPlansDrawer: React.FC<SavedPlansDrawerProps> = ({
 
         {/* Plans list */}
         <div className="p-4 sm:p-5 pb-8 sm:pb-5 overflow-y-auto flex-1 space-y-3">
-          {plans.length === 0 ? (
+          {safePlans.length === 0 ? (
             <div className="py-12 text-center text-slate-400 dark:text-slate-500 space-y-2">
               <BookOpen className="w-10 h-10 mx-auto opacity-40 text-slate-500 dark:text-slate-400" />
               <p className="text-sm font-medium">Aún no tienes planes guardados.</p>
               <p className="text-xs">Sube tus archivos y crea tu primer plan adaptado.</p>
             </div>
           ) : (
-            plans.map((plan) => {
+            safePlans.map((plan) => {
               const isActive = plan.id === activePlanId;
               return (
                 <div

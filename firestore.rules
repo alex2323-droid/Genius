@@ -47,5 +47,16 @@ service cloud.firestore {
         && resource.data.userId == request.auth.uid;
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
+
+    // Community Feedback & Suggestions
+    match /feedback/{feedbackId} {
+      allow read: if true;
+      allow create: if isValidId(feedbackId)
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() > 0
+        && request.resource.data.comment.size() <= 2000;
+      allow update: if true; // allow upvoting likes or admin status update
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || request.auth.token.email == 'alexparababi23@gmail.com');
+    }
   }
 }

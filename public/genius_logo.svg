@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="100%" height="100%">
+  <defs>
+    <!-- Main 3D Blue to Indigo Gradient -->
+    <linearGradient id="g-blue-indigo" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22d3ee" />
+      <stop offset="25%" stop-color="#0284c7" />
+      <stop offset="60%" stop-color="#2563eb" />
+      <stop offset="90%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+
+    <!-- Cyan Highlight Gradient -->
+    <linearGradient id="g-cyan-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+
+    <!-- Book Pages Clean White Gradient -->
+    <linearGradient id="g-pages" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e2e8f0" />
+    </linearGradient>
+
+    <!-- Dot on 'i' Cyan Gradient -->
+    <linearGradient id="g-dot-cyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+
+    <!-- Ambient Shadow for 3D realism without bounding box -->
+    <filter id="soft-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#3b82f6" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <g filter="url(#soft-glow)">
+    <!-- OPEN BOOK BASE (Left & Right Pages) -->
+    <path d="M 120 330 C 200 300, 260 305, 300 335 C 340 305, 400 300, 480 330 L 480 365 C 400 335, 340 340, 300 370 C 260 340, 200 335, 120 365 Z" fill="url(#g-cyan-glow)" />
+    <path d="M 130 315 C 205 288, 260 292, 300 320 C 340 292, 395 288, 470 315 L 470 340 C 395 313, 340 317, 300 345 C 260 317, 205 313, 130 340 Z" fill="url(#g-pages)" />
+    <line x1="300" y1="320" x2="300" y2="370" stroke="#0284c7" stroke-width="6" stroke-linecap="round" />
+
+    <!-- STYLIZED CAPITAL 'G' WITH GRADIENT -->
+    <path d="M 405 160 
+             C 405 100, 360 60, 300 60 
+             C 210 60, 160 120, 160 215 
+             C 160 300, 210 345, 300 345 
+             C 365 345, 405 305, 408 245 
+             L 290 245 
+             L 290 195 
+             L 455 195 
+             C 460 295, 395 390, 300 390 
+             C 170 390, 100 300, 100 215 
+             C 100 95, 188 10, 300 10 
+             C 385 10, 455 65, 458 160 Z" 
+          fill="url(#g-blue-indigo)" />
+
+    <!-- GRADUATION MORTARBOARD CAP ON TOP OF 'G' -->
+    <path d="M 300 10 L 450 70 L 300 130 L 150 70 Z" fill="url(#g-blue-indigo)" />
+    <path d="M 205 92 L 205 145 C 205 168, 245 188, 300 188 C 355 188, 395 168, 395 145 L 395 92" fill="none" stroke="url(#g-cyan-glow)" stroke-width="12" stroke-linecap="round" />
+    
+    <!-- Tassel -->
+    <path d="M 450 70 L 470 130" stroke="#a855f7" stroke-width="7" stroke-linecap="round" />
+    <circle cx="470" cy="142" r="10" fill="url(#g-cyan-glow)" />
+
+    <!-- SPARKLE STARS (Right Side) -->
+    <!-- Large Star -->
+    <path d="M 490 220 Q 490 245 515 245 Q 490 245 490 270 Q 490 245 465 245 Q 490 245 490 220 Z" fill="url(#g-cyan-glow)" />
+    <!-- Small Star -->
+    <path d="M 450 285 Q 450 298 463 298 Q 450 298 450 311 Q 450 298 437 298 Q 450 298 450 285 Z" fill="#c084fc" />
+
+    <!-- "Genius" TYPOGRAPHY (White Bold Text with Cyan Dot) -->
+    <g transform="translate(60, 410)">
+      <!-- G -->
+      <path d="M 60 70 C 40 70, 25 55, 25 35 C 25 15, 40 0, 60 0 C 78 0, 90 10, 93 25 L 75 25 C 72 17, 67 13, 60 13 C 48 13, 40 22, 40 35 C 40 48, 48 57, 60 57 C 69 57, 74 52, 75 43 L 58 43 L 58 31 L 92 31 L 92 37 C 92 57, 80 70, 60 70 Z" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5" />
+      <!-- e -->
+      <path d="M 115 70 C 100 70, 90 58, 90 40 C 90 22, 100 10, 115 10 C 130 10, 138 22, 138 40 L 105 40 C 106 51, 110 57, 116 57 C 121 57, 125 54, 127 48 L 138 48 C 135 62, 126 70, 115 70 Z M 115 21 C 109 21, 106 26, 105 32 L 126 32 C 125 26, 121 21, 115 21 Z" fill="#ffffff" />
+      <!-- n -->
+      <path d="M 148 12 L 162 12 L 162 21 C 167 14, 174 10, 183 10 C 196 10, 202 18, 202 32 L 202 68 L 187 68 L 187 35 C 187 26, 183 22, 176 22 C 168 22, 163 28, 163 38 L 163 68 L 148 68 Z" fill="#ffffff" />
+      <!-- i (with cyan dot) -->
+      <path d="M 212 12 L 227 12 L 227 68 L 212 68 Z" fill="#ffffff" />
+      <circle cx="219.5" cy="-2" r="8" fill="url(#g-dot-cyan)" />
+      <!-- u -->
+      <path d="M 238 12 L 253 12 L 253 45 C 253 54, 257 58, 264 58 C 272 58, 277 52, 277 42 L 277 12 L 292 12 L 292 68 L 278 68 L 278 59 C 273 66, 266 70, 257 70 C 244 70, 238 62, 238 48 Z" fill="#ffffff" />
+      <!-- s -->
+      <path d="M 318 70 C 304 70, 296 62, 296 49 L 310 49 C 310 55, 313 58, 319 58 C 324 58, 328 55, 328 51 C 328 47, 324 45, 317 43 L 311 41 C 300 38, 296 32, 296 23 C 296 13, 305 10, 317 10 C 330 10, 337 17, 338 28 L 324 28 C 323 22, 320 20, 316 20 C 312 20, 309 22, 309 25 C 309 28, 312 30, 318 32 L 324 34 C 335 37, 341 42, 341 51 C 341 63, 331 70, 318 70 Z" fill="#ffffff" />
+    </g>
+  </g>
+</svg>

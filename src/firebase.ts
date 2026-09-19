@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { 
   getFirestore, 
+  initializeFirestore,
   collection, 
   doc, 
   setDoc, 
@@ -19,14 +20,29 @@ import {
   query, 
   where, 
   orderBy, 
-  serverTimestamp 
+  serverTimestamp
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-// CRITICAL: Must pass firebaseConfig.firestoreDatabaseId to connect to the provisioned database
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Initialize Firestore with force long polling and ignore undefined properties
+// to ensure seamless, error-free connectivity in iframe sandboxes.
+export const db = (() => {
+  try {
+    return initializeFirestore(
+      app,
+      {
+        experimentalForceLongPolling: true,
+        ignoreUndefinedProperties: true,
+      },
+      firebaseConfig.firestoreDatabaseId
+    );
+  } catch {
+    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  }
+})();
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
