@@ -528,7 +528,7 @@ export default function App() {
         }}
         onOpenAchievements={() => setIsAchievementsModalOpen(true)}
         unlockedAchievementsCount={activePlan ? getPlanAchievements(activePlan).filter(a => a.unlockedAt || a.progressPercent >= 100).length : 0}
-        onOpenAdmin={() => setIsAdminModalOpen(true)}
+        onOpenAdmin={user?.email === 'alexparababi23@gmail.com' ? () => setIsAdminModalOpen(true) : undefined}
         onOpenFeedback={() => setIsFeedbackModalOpen(true)}
         onOpenProfileModal={() => setIsProfileModalOpen(true)}
         onOpenDashboard={activePlan ? () => setIsDashboardOpen(true) : undefined}
@@ -872,7 +872,7 @@ export default function App() {
         onOpenSavedPlans={() => setIsDrawerOpen(true)}
         onOpenAchievements={() => setIsAchievementsModalOpen(true)}
         onOpenFeedback={() => setIsFeedbackModalOpen(true)}
-        onOpenAdmin={() => setIsAdminModalOpen(true)}
+        onOpenAdmin={user?.email === 'alexparababi23@gmail.com' ? () => setIsAdminModalOpen(true) : undefined}
         onOpenProfileModal={() => setIsProfileModalOpen(true)}
         onLogin={signInWithGoogle}
         onLogout={logoutUser}

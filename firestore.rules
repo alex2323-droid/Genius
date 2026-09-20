@@ -58,5 +58,11 @@ service cloud.firestore {
       allow update: if true; // allow upvoting likes or admin status update
       allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || request.auth.token.email == 'alexparababi23@gmail.com');
     }
+
+    // Settings (such as custom logo)
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.token.email == 'alexparababi23@gmail.com';
+    }
   }
 }

@@ -75,6 +75,18 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "rating", "category", "comment", "createdAt"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Global application setting such as custom branding logo",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["id", "logoUrl"]
     }
   },
   "firestore": {
@@ -93,6 +105,10 @@
     "/feedback/{feedbackId}": {
       "entity": "Feedback",
       "description": "User suggestions and site reviews"
+    },
+    "/settings/{settingId}": {
+      "entity": "Setting",
+      "description": "Global settings editable only by the admin user"
     }
   }
 }

@@ -31,6 +31,7 @@ export const AdminLogoModal: React.FC<AdminLogoModalProps> = ({
   const [previewUrl, setPreviewUrl] = useState<string | null>(getCustomLogo());
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -60,19 +61,35 @@ export const AdminLogoModal: React.FC<AdminLogoModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (previewUrl) {
-      setCustomLogo(previewUrl);
-      setSuccessMsg('¡Logo actualizado con éxito! Se aplicó tal cual en toda la plataforma.');
-      setTimeout(() => setSuccessMsg(null), 3000);
+      try {
+        setIsSaving(true);
+        setErrorMsg(null);
+        await setCustomLogo(previewUrl);
+        setSuccessMsg('¡Logo actualizado con éxito! Guardado en la base de datos de Firestore y aplicado para todos los estudiantes.');
+        setTimeout(() => setSuccessMsg(null), 4000);
+      } catch (err: any) {
+        setErrorMsg('Error al guardar el logo en la base de datos: ' + (err.message || err));
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
-  const handleReset = () => {
-    resetCustomLogo();
-    setPreviewUrl(null);
-    setSuccessMsg('Se ha restablecido el logo predeterminado.');
-    setTimeout(() => setSuccessMsg(null), 3000);
+  const handleReset = async () => {
+    try {
+      setIsSaving(true);
+      setErrorMsg(null);
+      await resetCustomLogo();
+      setPreviewUrl(null);
+      setSuccessMsg('Se ha restablecido el logo predeterminado en la base de datos.');
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setErrorMsg('Error al restablecer el logo original: ' + (err.message || err));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -232,26 +249,28 @@ export const AdminLogoModal: React.FC<AdminLogoModalProps> = ({
           <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 flex flex-wrap items-center justify-between gap-3">
             <button
               onClick={handleReset}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-slate-200/60 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              disabled={isSaving}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-slate-200/60 dark:hover:bg-slate-700 transition-colors cursor-pointer disabled:opacity-50"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Restablecer Original
+              {isSaving ? 'Restableciendo...' : 'Restablecer Original'}
             </button>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                disabled={isSaving}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700 transition-colors cursor-pointer disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSave}
-                disabled={!previewUrl}
+                disabled={!previewUrl || isSaving}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-blue-500/20 transition-all cursor-pointer"
               >
                 <Check className="w-4 h-4" />
-                Guardar y Aplicar Logo
+                {isSaving ? 'Guardando...' : 'Guardar y Aplicar Logo'}
               </button>
             </div>
           </div>
