@@ -51,9 +51,78 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [isGeneratingMore, setIsGeneratingMore] = useState<boolean>(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [difficultyFilter, setDifficultyFilter] = useState<'all' | 'basic' | 'intermediate' | 'advanced' | 'mastery'>('all');
 
   const rawExercises = Array.isArray(plan?.exercises) ? plan.exercises : [];
   const schedule = Array.isArray(plan?.schedule) ? plan.schedule : [];
+
+  // Stable Fisher-Yates shuffle algorithm for client-side display with re-mapping of correctAnswer
+  const fisherYatesShuffleOptions = React.useCallback((
+    options: string[],
+    correctAnswer: string
+  ): { options: string[]; correctAnswer: string } => {
+    if (!Array.isArray(options) || options.length < 2) {
+      return { options: options || [], correctAnswer };
+    }
+
+    const rawCorrect = String(correctAnswer).trim();
+    const stripPrefix = (str: string) =>
+      str.replace(/^(?:Opción\s+[A-Da-d1-4]|Opci[oó]n\s+[A-Da-d1-4]|[A-Da-d1-4])\s*[\)\.\:\-]\s*/i, '').trim();
+
+    const cleanOptions = options.map(o => stripPrefix(String(o)));
+    const cleanCorrect = stripPrefix(rawCorrect);
+
+    let correctIdx = cleanOptions.findIndex(
+      (opt) => opt.toLowerCase() === cleanCorrect.toLowerCase() ||
+               opt === rawCorrect ||
+               stripPrefix(opt) === stripPrefix(rawCorrect)
+    );
+
+    if (correctIdx === -1) {
+      correctIdx = cleanOptions.findIndex(
+        (opt) => opt.length > 5 && (opt.includes(cleanCorrect) || cleanCorrect.includes(opt))
+      );
+    }
+
+    if (correctIdx === -1) {
+      correctIdx = options.findIndex((opt) => String(opt).toLowerCase() === rawCorrect.toLowerCase());
+    }
+
+    const correctItem = correctIdx !== -1 ? options[correctIdx] : correctAnswer;
+
+    // Perform standard Fisher-Yates Shuffle algorithm
+    const shuffled = [...options];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    // Ensure correctAnswer is always present in the shuffled list
+    if (!shuffled.includes(correctItem)) {
+      shuffled[Math.floor(Math.random() * shuffled.length)] = correctItem;
+    }
+
+    return {
+      options: shuffled,
+      correctAnswer: correctItem,
+    };
+  }, []);
+
+  // Memoize shuffled options mapped by exercise ID so they don't shuffle during re-renders
+  const shuffledExercisesMap = React.useMemo(() => {
+    const map: Record<string, { options: string[]; correctAnswer: string }> = {};
+    rawExercises.forEach((ex) => {
+      if (ex.type === 'mcq' && Array.isArray(ex.options) && ex.options.length > 0) {
+        map[ex.id] = fisherYatesShuffleOptions(ex.options, ex.correctAnswer || '');
+      } else {
+        map[ex.id] = {
+          options: ex.options || [],
+          correctAnswer: ex.correctAnswer || '',
+        };
+      }
+    });
+    return map;
+  }, [rawExercises, fisherYatesShuffleOptions]);
 
   // Filter exercises strictly matching the selected study day
   const { exercises: dayExercises, assignedDayMap: exerciseDayMap } = getExercisesForDay(
@@ -61,6 +130,12 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
     selectedDayNumber,
     schedule
   );
+
+  // Apply difficulty filtering on top of selected study day exercises
+  const filteredExercises = React.useMemo(() => {
+    if (difficultyFilter === 'all') return dayExercises;
+    return dayExercises.filter(ex => ex.difficulty === difficultyFilter);
+  }, [dayExercises, difficultyFilter]);
 
   const activeDayInfo = typeof selectedDayNumber === 'number'
     ? schedule.find(d => d.dayNumber === selectedDayNumber) || null
@@ -182,7 +257,8 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
   const mcqExercises = dayExercises.filter(e => e.type === 'mcq' || e.type === 'true_false');
   let correctCount = 0;
   mcqExercises.forEach(e => {
-    if (selectedAnswers[e.id] === e.correctAnswer) {
+    const activeCorrectAnswer = shuffledExercisesMap[e.id]?.correctAnswer || e.correctAnswer;
+    if (selectedAnswers[e.id] === activeCorrectAnswer) {
       correctCount++;
     }
   });
@@ -381,6 +457,12 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
               <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
                 • {dayExercises.length} preguntas
               </span>
+
+              {plan.materialComplexity && (
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 border border-blue-300 dark:border-blue-800 flex items-center gap-1">
+                  <span>Escalado: {plan.materialComplexity.tierLabel}</span>
+                </span>
+              )}
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight leading-snug">
               {isExamMode ? 'Simulacro Cronometrado' : 'Práctica Guiada con Explicaciones'}
@@ -453,6 +535,70 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
         )}
       </div>
 
+      {/* Difficulty Filter Selectors */}
+      {dayExercises.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-2.5 mb-4 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800 border-b border-slate-150 dark:border-slate-800/60">
+          <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest shrink-0 mr-1.5">
+            Filtrar nivel:
+          </span>
+          <button
+            type="button"
+            onClick={() => setDifficultyFilter('all')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+              difficultyFilter === 'all'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-750'
+            }`}
+          >
+            Todos ({dayExercises.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setDifficultyFilter('basic')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+              difficultyFilter === 'basic'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-750'
+            }`}
+          >
+            Básico ({dayExercises.filter(e => e.difficulty === 'basic').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setDifficultyFilter('intermediate')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+              difficultyFilter === 'intermediate'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-750'
+            }`}
+          >
+            Intermedio ({dayExercises.filter(e => e.difficulty === 'intermediate').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setDifficultyFilter('advanced')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+              difficultyFilter === 'advanced'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-750'
+            }`}
+          >
+            Avanzado ({dayExercises.filter(e => e.difficulty === 'advanced').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setDifficultyFilter('mastery')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+              difficultyFilter === 'mastery'
+                ? 'bg-rose-600 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-750'
+            }`}
+          >
+            Máster ({dayExercises.filter(e => e.difficulty === 'mastery').length})
+          </button>
+        </div>
+      )}
+
       {/* Exercises List */}
       <div className="space-y-5">
         {dayExercises.length === 0 ? (
@@ -472,13 +618,35 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
               </button>
             )}
           </div>
+        ) : filteredExercises.length === 0 ? (
+          <div className="p-10 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-500 space-y-3">
+            <p className="font-semibold text-slate-700 dark:text-slate-300">
+              No hay ejercicios de dificultad "{
+                difficultyFilter === 'basic' ? 'Básico' :
+                difficultyFilter === 'intermediate' ? 'Intermedio' :
+                difficultyFilter === 'advanced' ? 'Avanzado' : 'Máster'
+              }" registrados para hoy.
+            </p>
+            <button
+              type="button"
+              onClick={() => setDifficultyFilter('all')}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+            >
+              Mostrar todos los niveles ({dayExercises.length})
+            </button>
+          </div>
         ) : (
-          dayExercises.map((exercise, index) => {
+          filteredExercises.map((exercise, index) => {
             const isMCQ = exercise.type === 'mcq' || exercise.type === 'true_false';
             const selectedOption = selectedAnswers[exercise.id];
             const hasSelected = selectedOption !== undefined;
             const showAnswerFeedback = !isExamMode ? hasSelected : submitted;
-            const isCorrect = selectedOption === exercise.correctAnswer;
+
+            const shuffledData = shuffledExercisesMap[exercise.id];
+            const optionsToRender = shuffledData?.options || exercise.options || [];
+            const activeCorrectAnswer = shuffledData?.correctAnswer || exercise.correctAnswer || '';
+            const isCorrect = selectedOption === activeCorrectAnswer;
+
             const showHint = showHints[exercise.id];
             const openEval = openEvaluations[exercise.id];
             const assignedDay = exerciseDayMap.get(exercise.id || `ex-${index}`) || 1;
@@ -499,16 +667,25 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
                     </span>
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        exercise.difficulty === 'advanced' || exercise.difficulty === 'mastery'
+                        exercise.difficulty === 'mastery'
+                          ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-200/80 dark:border-rose-900/60'
+                          : exercise.difficulty === 'advanced'
                           ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200/80 dark:border-purple-900/60'
                           : exercise.difficulty === 'intermediate'
                           ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-200/80 dark:border-blue-900/60'
                           : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-900/60'
                       }`}
                     >
-                      {exercise.difficulty === 'advanced' || exercise.difficulty === 'mastery' ? 'Avanzado (Sobresaliente 90%+)' :
+                      {exercise.difficulty === 'mastery' ? '🔥 Máster (Multivariable / Casos)' :
+                       exercise.difficulty === 'advanced' ? 'Avanzado (Sobresaliente 90%+)' :
                        exercise.difficulty === 'intermediate' ? 'Intermedio (Notable 75%+)' : 'Fundamental (Aprobado Base)'}
                     </span>
+
+                    {exercise.cognitiveLevel && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-900/60">
+                        {exercise.cognitiveLevel === 'analysis' ? 'Análisis Crítico' : exercise.cognitiveLevel === 'evaluation' ? 'Evaluación y Síntesis' : 'Aplicación Práctica'}
+                      </span>
+                    )}
                   </div>
 
                   {exercise.hint && (
@@ -540,17 +717,17 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
                 )}
 
                 {/* MCQ Options */}
-                {isMCQ && exercise.options && (
+                {isMCQ && optionsToRender.length > 0 && (
                   <div className="space-y-2 sm:space-y-2.5">
-                    {exercise.options.map((option, optIdx) => {
+                    {optionsToRender.map((option, optIdx) => {
                       const isSelected = selectedOption === option;
-                      let optionStyle = 'border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200';
+                      let optionStyle = 'border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 transition-all duration-300';
 
                       if (showAnswerFeedback) {
-                        if (option === exercise.correctAnswer) {
-                          optionStyle = 'border-emerald-500 dark:border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/50 text-emerald-950 dark:text-emerald-200 font-semibold';
+                        if (option === activeCorrectAnswer) {
+                          optionStyle = 'border-emerald-500 dark:border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-200 font-semibold ring-2 ring-emerald-500/30 dark:ring-emerald-400/20 scale-[1.01] animate-[pulse_2s_infinite]';
                         } else if (isSelected && !isCorrect) {
-                          optionStyle = 'border-red-400 dark:border-red-500 bg-red-50/80 dark:bg-red-950/50 text-red-950 dark:text-red-200';
+                          optionStyle = 'border-rose-500 dark:border-rose-500 bg-rose-50/80 dark:bg-rose-950/40 text-rose-950 dark:text-rose-200 ring-2 ring-rose-500/30 dark:ring-rose-400/20 scale-[0.99]';
                         } else {
                           optionStyle = 'border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/40 text-slate-400 dark:text-slate-500 opacity-60';
                         }
@@ -563,7 +740,7 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
                           key={optIdx}
                           type="button"
                           onClick={() => handleSelectOption(exercise.id, option)}
-                          className={`w-full text-left p-3 sm:p-3.5 min-h-[48px] rounded-xl border text-xs sm:text-sm transition-all flex items-center justify-between cursor-pointer active:scale-[0.99] ${optionStyle}`}
+                          className={`w-full text-left p-3 sm:p-3.5 min-h-[48px] rounded-xl border text-xs sm:text-sm flex items-center justify-between cursor-pointer active:scale-[0.98] ${optionStyle}`}
                         >
                           <div className="flex items-center gap-2.5 sm:gap-3">
                             <span className="w-6 h-6 rounded-full border border-slate-300 dark:border-slate-600 text-xs font-bold flex items-center justify-center shrink-0">
@@ -572,11 +749,11 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
                             <span className="leading-snug">{option}</span>
                           </div>
 
-                          {showAnswerFeedback && option === exercise.correctAnswer && (
-                            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 ml-2" />
+                          {showAnswerFeedback && option === activeCorrectAnswer && (
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 ml-2 animate-bounce" />
                           )}
                           {showAnswerFeedback && isSelected && !isCorrect && (
-                            <XCircle className="w-5 h-5 text-red-500 dark:text-red-400 shrink-0 ml-2" />
+                            <XCircle className="w-5 h-5 text-rose-500 dark:text-rose-400 shrink-0 ml-2" />
                           )}
                         </button>
                       );
@@ -639,11 +816,37 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
                   </div>
                 )}
 
-                {/* Explanation section (for MCQs when answered) */}
-                {isMCQ && showAnswerFeedback && exercise.explanation && (
-                  <div className="mt-3.5 p-3 sm:p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300">
-                    <p className="font-bold text-slate-900 dark:text-slate-100 mb-0.5">Explicación Paso a Paso:</p>
-                    <p className="leading-relaxed">{exercise.explanation}</p>
+                {/* Immediate Learning Feedback & Explanation for MCQs */}
+                {isMCQ && showAnswerFeedback && (
+                  <div className={`mt-4 p-4 rounded-xl border transition-all duration-300 text-xs sm:text-sm animate-[fadeIn_0.3s_ease-out] ${
+                    isCorrect
+                      ? 'bg-emerald-50/30 dark:bg-emerald-950/15 border-emerald-200 dark:border-emerald-900/40 text-emerald-950 dark:text-emerald-300'
+                      : 'bg-rose-50/30 dark:bg-rose-950/15 border-rose-200 dark:border-rose-900/40 text-rose-950 dark:text-rose-300'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2.5">
+                      {isCorrect ? (
+                        <>
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <span className="font-black text-xs uppercase tracking-wide">
+                            ¡RESPUESTA CORRECTA! Excelente análisis.
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="w-5 h-5 text-rose-500 dark:text-rose-400 shrink-0" />
+                          <span className="font-black text-xs uppercase tracking-wide">
+                            RESPUESTA INCORRECTA • Revisa la explicación para asimilar este concepto
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {exercise.explanation && (
+                      <div className="pt-2.5 border-t border-dashed border-slate-200 dark:border-slate-800/80">
+                        <p className="font-bold text-slate-900 dark:text-slate-100 mb-1">🔬 Explicación y Justificación Académica:</p>
+                        <p className="text-slate-700 dark:text-slate-300 text-xs leading-relaxed whitespace-pre-line">{exercise.explanation}</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

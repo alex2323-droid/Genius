@@ -24,15 +24,27 @@ import {
   Save,
   X,
   RefreshCw,
-  Award
+  Award,
+  Atom,
+  GitMerge,
+  Scale,
+  Calculator,
+  BarChart2,
+  Quote,
+  ExternalLink,
+  Headphones,
+  Volume2
 } from 'lucide-react';
-import type { StudyPlan, CoreConcept, DefinitionOrFormula, ExamTrapItem } from '../types/study.ts';
+import type { StudyPlan, CoreConcept, DefinitionOrFormula, ExamTrapItem, DocumentCitation } from '../types/study.ts';
 import {
   getConceptsForDay,
   getFormulasForDay,
   getTrapsForDay,
   type MappedTrap
 } from '../utils/dayStudyMapping.ts';
+import { resolveDocumentCitation } from '../utils/documentAnalyzer.ts';
+import { ConceptCard } from './ConceptCard.tsx';
+import { AudioSummaryPlayer } from './AudioSummaryPlayer.tsx';
 
 interface StudyGuideViewProps {
   plan: StudyPlan;
@@ -83,6 +95,39 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
 
   const [isGeneratingTraps, setIsGeneratingTraps] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+
+  // Document Citation UI state
+  const [expandedCitations, setExpandedCitations] = useState<Record<string, boolean>>({});
+  const [copiedCitationKey, setCopiedCitationKey] = useState<string | null>(null);
+
+  // Audio Speech Summary state
+  const [isAudioPlayerOpen, setIsAudioPlayerOpen] = useState(false);
+  const [activeAudioTrackId, setActiveAudioTrackId] = useState<string | null>(null);
+
+  const handleStartAudioSummary = (trackId?: string) => {
+    setIsAudioPlayerOpen(true);
+    if (trackId) {
+      setActiveAudioTrackId(trackId);
+    }
+  };
+
+  const handleToggleCitation = (id: string) => {
+    setExpandedCitations(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  const handleCopyCitationText = async (citation: DocumentCitation, id: string) => {
+    const textToCopy = `«${citation.exactQuote}»\n— Fuente Original: ${citation.fileName || 'Material del estudiante'} (${citation.sectionTitle || 'Sección'} • ${citation.pageOrSlide || 'Ubicación'})`;
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopiedCitationKey(id);
+      setTimeout(() => setCopiedCitationKey(null), 2500);
+    } catch (e) {
+      console.error('Failed to copy citation:', e);
+    }
+  };
 
   const toggleMasteredTrap = (originalIndex: number) => {
     setMasteredTrapIndices(prev => 
@@ -471,7 +516,25 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
             </h2>
           </div>
 
-          <div className="flex items-center gap-2 pt-1 sm:pt-0">
+          <div className="flex items-center flex-wrap gap-2 pt-1 sm:pt-0">
+            <button
+              type="button"
+              onClick={() => handleStartAudioSummary('track-executive-summary')}
+              className={`w-full sm:w-auto flex items-center justify-center gap-2 px-3.5 py-2.5 min-h-[44px] text-xs font-bold rounded-xl transition-all cursor-pointer active:scale-95 shadow-xs ${
+                isAudioPlayerOpen
+                  ? 'bg-blue-600 text-white shadow-blue-500/30 ring-2 ring-blue-400'
+                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-blue-600/20'
+              }`}
+              title="Escuchar resumen por voz con Web Speech API"
+              aria-label="Escuchar resumen de la guía de estudio en voz alta"
+            >
+              <Headphones className="w-4 h-4" />
+              <span>{isAudioPlayerOpen ? 'Reproductor Activo' : 'Escuchar Resumen'}</span>
+              {isAudioPlayerOpen && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              )}
+            </button>
+
             <button
               type="button"
               onClick={handleCopyGuide}
@@ -495,12 +558,44 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
         {/* Executive summary (shown if on 'all' or day 1) */}
         {(selectedDayNumber === 'all' || selectedDayNumber === 1) && studyGuide.executiveSummary && (
           <div className="mt-4 p-3.5 sm:p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/60">
-            <p className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-              <Lightbulb className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" /> Resumen Ejecutivo de Alto Rendimiento
-            </p>
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <p className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Lightbulb className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" /> Resumen Ejecutivo de Alto Rendimiento
+              </p>
+              <button
+                type="button"
+                onClick={() => handleStartAudioSummary('track-executive-summary')}
+                className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-blue-700 dark:text-blue-300 bg-white/90 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-slate-700 rounded-lg border border-blue-200 dark:border-blue-800 transition cursor-pointer"
+                title="Escuchar este resumen"
+              >
+                <Volume2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>Escuchar</span>
+              </button>
+            </div>
             <p className="text-xs sm:text-sm text-blue-950 dark:text-blue-200 leading-relaxed">
               {studyGuide.executiveSummary}
             </p>
+          </div>
+        )}
+
+        {/* Material Complexity Scaling Info */}
+        {plan.materialComplexity && (
+          <div className="mt-3.5 px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold shrink-0">
+                <BarChart2 className="w-3.5 h-3.5" />
+              </span>
+              <span className="font-semibold text-slate-700 dark:text-slate-200">
+                Escalado Documental: <span className="font-bold text-blue-600 dark:text-blue-400">{plan.materialComplexity.tierLabel}</span>
+              </span>
+              <span className="text-slate-400 dark:text-slate-500">•</span>
+              <span className="text-slate-500 dark:text-slate-400">
+                {plan.materialComplexity.fileCount} doc(s) • ~{plan.materialComplexity.totalWords.toLocaleString()} palabras analizadas
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 italic sm:text-right">
+              {plan.materialComplexity.explanation}
+            </span>
           </div>
         )}
 
@@ -559,100 +654,17 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
               No se encontraron conceptos para este criterio de búsqueda.
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {filteredConcepts.map((concept, idx) => {
-                const dayNum = concept.dayNumber || 1;
-                return (
-                  <div
-                    key={idx}
-                    className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-xs hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="px-2.5 py-0.5 rounded-lg text-xs font-black bg-blue-600 text-white shadow-xs">
-                          Día {dayNum}
-                        </span>
-                        <h4 className="font-bold text-sm sm:text-base text-slate-900 dark:text-slate-100">
-                          {concept.title}
-                        </h4>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                            concept.importance === 'critical'
-                              ? 'bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300'
-                              : concept.importance === 'high'
-                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                          }`}
-                        >
-                          {concept.importance === 'critical' ? 'Pregunta Frecuente' :
-                           concept.importance === 'high' ? 'Importancia Alta' : 'Importancia Media'}
-                        </span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => onAskTutor(concept.title)}
-                        className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-2 min-h-[38px] text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 rounded-xl transition-colors cursor-pointer active:scale-95"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 shrink-0" /> Explicar con Tutor IA
-                      </button>
-                    </div>
-
-                    {/* Structured, formatted concept explanation */}
-                    <div className="space-y-2.5 text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed mt-2">
-                      {concept.explanation ? (
-                        concept.explanation.split('\n').map((paragraph, pIdx) => {
-                          const trimmed = paragraph.trim();
-                          if (!trimmed) return null;
-
-                          // Format lines starting with emojis, bullets or section headers
-                          const colonIdx = trimmed.indexOf(':');
-                          if (colonIdx > 0 && colonIdx < 45 && (
-                            trimmed.startsWith('📌') || 
-                            trimmed.startsWith('⚙️') || 
-                            trimmed.startsWith('💡') || 
-                            trimmed.startsWith('⚠️') || 
-                            trimmed.startsWith('•') ||
-                            trimmed.startsWith('Definición') ||
-                            trimmed.startsWith('Mecanismo')
-                          )) {
-                            const headerTitle = trimmed.slice(0, colonIdx + 1).trim();
-                            const bodyContent = trimmed.slice(colonIdx + 1).trim();
-                            return (
-                              <div 
-                                key={pIdx} 
-                                className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 transition-colors"
-                              >
-                                <span className="font-extrabold text-slate-900 dark:text-slate-100 block mb-1">
-                                  {headerTitle}
-                                </span>
-                                <span className="text-slate-700 dark:text-slate-300 leading-relaxed">
-                                  {bodyContent}
-                                </span>
-                              </div>
-                            );
-                          }
-
-                          return (
-                            <p key={pIdx} className="text-slate-700 dark:text-slate-300 leading-relaxed">
-                              {trimmed}
-                            </p>
-                          );
-                        })
-                      ) : (
-                        <p className="text-slate-500 italic">Sin explicación detallada disponible.</p>
-                      )}
-                    </div>
-
-                    {concept.exampleOrFormula && (
-                      <div className="mt-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs">
-                        <span className="font-bold text-slate-800 dark:text-slate-200">Ejemplo / Fórmula: </span>
-                        <span className="text-slate-600 dark:text-slate-400 font-mono break-all">{concept.exampleOrFormula}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+            <div className="space-y-4">
+              {filteredConcepts.map((concept, idx) => (
+                <ConceptCard
+                  key={idx}
+                  concept={concept}
+                  index={idx}
+                  plan={plan}
+                  onAskTutor={onAskTutor}
+                  onStartAudioSummary={handleStartAudioSummary}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -685,7 +697,7 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
                     className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs"
                   >
                     <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-indigo-600 text-white">
                           Día {dayNum}
                         </span>
@@ -693,16 +705,71 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
                           {item.term}
                         </h4>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => onAskTutor(item.term)}
-                        className="w-10 h-10 -mr-2 -mt-1 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 active:text-blue-600 cursor-pointer rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-                        title="Preguntar al tutor"
-                        aria-label={`Preguntar al tutor sobre ${item.term}`}
-                      >
-                        <HelpCircle className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleStartAudioSummary(`track-formula-${idx}-${item.term}`)}
+                          className="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                          title="Escuchar fórmula o definición en voz alta"
+                          aria-label={`Escuchar definición de ${item.term}`}
+                        >
+                          <Volume2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleCitation(`formula-${idx}`)}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                            expandedCitations[`formula-${idx}`]
+                              ? 'bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200'
+                              : 'text-amber-700 dark:text-amber-400 hover:bg-amber-100/60 dark:hover:bg-slate-800'
+                          }`}
+                          title="Ver cita textual del documento"
+                          aria-label={`Ver cita al documento de ${item.term}`}
+                        >
+                          <Quote className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onAskTutor(item.term)}
+                          className="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                          title="Preguntar al tutor"
+                          aria-label={`Preguntar al tutor sobre ${item.term}`}
+                        >
+                          <HelpCircle className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
+
+                    {/* Interactive Citation for Formula/Definition */}
+                    {expandedCitations[`formula-${idx}`] && (() => {
+                      const citation = resolveDocumentCitation(item, plan);
+                      const citationKey = `formula-${idx}`;
+                      return (
+                        <div className="my-2.5 p-3 rounded-xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 text-xs">
+                          <div className="flex items-center justify-between gap-1 mb-1.5 pb-1 border-b border-amber-200 dark:border-amber-900/50">
+                            <span className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1 text-[11px]">
+                              <Quote className="w-3 h-3 text-amber-600" />
+                              Cita: {citation.fileName || 'Material del curso'} {citation.pageOrSlide ? `(${citation.pageOrSlide})` : ''}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyCitationText(citation, citationKey)}
+                              className="px-2 py-0.5 text-[10px] font-bold text-amber-900 dark:text-amber-200 bg-white dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-slate-700 rounded border border-amber-200 dark:border-amber-800 transition cursor-pointer"
+                              title="Copiar cita"
+                            >
+                              {copiedCitationKey === citationKey ? '¡Copiado!' : 'Copiar'}
+                            </button>
+                          </div>
+                          <p className="italic text-slate-800 dark:text-slate-200 font-medium pl-2 border-l-2 border-amber-500 mb-1 leading-relaxed">
+                            «{citation.exactQuote}»
+                          </p>
+                          <p className="text-[11px] text-amber-900/80 dark:text-amber-300/80">
+                            <span className="font-semibold">Justificación:</span> {citation.relevance || 'Definición exacta del material de estudio.'}
+                          </p>
+                        </div>
+                      );
+                    })()}
+
                     <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-2">
                       {item.definition}
                     </p>
@@ -1083,6 +1150,16 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
 
                         <button
                           type="button"
+                          onClick={() => handleStartAudioSummary(`track-trap-${idx}-${trap.originalIndex}`)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+                          title="Escuchar trampa de examen en voz alta"
+                        >
+                          <Headphones className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Escuchar</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => toggleMasteredTrap(trap.originalIndex)}
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
                             isMastered
@@ -1152,6 +1229,19 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
           )}
         </div>
       )}
+
+      {/* Web Speech Audio Summary Player */}
+      <AudioSummaryPlayer
+        plan={plan}
+        selectedDayNumber={selectedDayNumber}
+        concepts={dayConcepts}
+        formulas={dayFormulas}
+        traps={dayMappedTraps}
+        isOpen={isAudioPlayerOpen}
+        onClose={() => setIsAudioPlayerOpen(false)}
+        activeTrackId={activeAudioTrackId}
+        onTrackChange={(trackId) => setActiveAudioTrackId(trackId)}
+      />
     </div>
   );
 };

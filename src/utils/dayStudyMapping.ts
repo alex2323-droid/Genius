@@ -187,6 +187,145 @@ function determineDayNumber(
 }
 
 /**
+ * Sanitizes and normalizes explanation and example data to remove repetitions,
+ * unrelated copy-paste fallbacks (like thymus text on blood vessels), and raw file markers.
+ */
+export function sanitizeConceptExplanation(
+  rawExplanation: string,
+  title: string,
+  subject: string = ''
+): {
+  whatIs: string;
+  howWorks: string;
+  whyMatters: string;
+  fullExplanation: string;
+} {
+  const cleanTitle = title.replace(/^[•\s\d\.\-\)]+/, '').trim();
+  const lowerTitle = cleanTitle.toLowerCase();
+  
+  let whatIs = '';
+  let howWorks = '';
+  let whyMatters = '';
+
+  if (rawExplanation && rawExplanation.trim()) {
+    const lines = rawExplanation.split('\n').map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx > 0 && colonIdx < 50) {
+        const header = line.slice(0, colonIdx).toLowerCase();
+        const content = line.slice(colonIdx + 1).trim();
+        
+        if (header.includes('qué es') || header.includes('que es') || header.includes('trata') || header.includes('fundamento') || header.includes('definición')) {
+          whatIs = content;
+        } else if (header.includes('cómo funciona') || header.includes('como funciona') || header.includes('paso a paso') || header.includes('mecanismo') || header.includes('proceso')) {
+          howWorks = content;
+        } else if (header.includes('por qué importa') || header.includes('por que importa') || header.includes('examen') || header.includes('justificación') || header.includes('clave')) {
+          whyMatters = content;
+        }
+      }
+    }
+  }
+
+  // Check if whatIs is missing or has file marker
+  if (!whatIs || whatIs.includes('===') || whatIs.includes('---')) {
+    whatIs = `${cleanTitle} es un componente y estructura esencial de estudio en ${subject || 'esta materia'}, caracterizado por sus relaciones funcionales y anatómicas clave.`;
+  }
+
+  // Check if howWorks is missing, has file marker, or is an unrelated copy-paste fallback (e.g. thymus on non-thymus concept)
+  const isTimoRelated = lowerTitle.includes('timo') || lowerTitle.includes('linf');
+  const isGenericThymusCopy = howWorks.toLowerCase().includes('corteza del timo') && !isTimoRelated;
+  
+  if (!howWorks || howWorks.length < 15 || howWorks.includes('===') || howWorks.includes('---') || isGenericThymusCopy) {
+    if (lowerTitle.includes('arteria') || lowerTitle.includes('vena') || lowerTitle.includes('tronco') || lowerTitle.includes('vaso') || lowerTitle.includes('aorta')) {
+      howWorks = `Trayecto vascular y distribución: Se origina como rama principal/colateral, transporta el flujo sanguíneo con presión regulada y nutre los territorios tisulares específicos antes de subdividirse en redes capilares.`;
+    } else if (lowerTitle.includes('corazón') || lowerTitle.includes('card') || lowerTitle.includes('válvula') || lowerTitle.includes('aurícula') || lowerTitle.includes('ventrículo')) {
+      howWorks = `Dinámica cardíaca y contracción: Opera mediante ciclos rítmicos de sístole y diástole, coordinando la apertura valvular para mantener el gradiente hemodinámico continuo.`;
+    } else if (lowerTitle.includes('médula') || lowerTitle.includes('linfo') || lowerTitle.includes('ganglio') || lowerTitle.includes('bazo')) {
+      howWorks = `Filtración y respuesta inmunitaria: Capta la linfa/sangre mediante senos especializados, reteniendo antígenos y activando células efectoras maduras.`;
+    } else {
+      howWorks = `Mecanismo operativo paso a paso: ${cleanTitle} actúa de forma coordinada a través de sus componentes estructurales, regulando la función e interactuando con los tejidos adyacentes.`;
+    }
+  }
+
+  // Check if whyMatters is missing, repetitive or generic
+  const isGenericExamRepetition = whyMatters.includes('calificar el dominio de') && whyMatters.includes('al 100%');
+  if (!whyMatters || whyMatters.length < 15 || whyMatters.includes('===') || whyMatters.includes('---') || isGenericExamRepetition) {
+    if (lowerTitle.includes('arteria') || lowerTitle.includes('tronco') || lowerTitle.includes('aorta')) {
+      whyMatters = `Pregunta obligatoria de examen sobre ramas colaterales, territorio de irrigación y consecuencias clínicas o quirúrgicas de su oclusión.`;
+    } else if (lowerTitle.includes('linf') || lowerTitle.includes('timo') || lowerTitle.includes('ganglio')) {
+      whyMatters = `Clave evaluativa: Diferenciación entre órganos linfoides primarios y secundarios, y sentido del flujo linfático hacia la circulación venosa.`;
+    } else {
+      whyMatters = `Foco de evaluación: Criterio determinante en preguntas de examen teórico-práctico para justificar principios, diagnóstico o relaciones topográficas.`;
+    }
+  }
+
+  const fullExplanation = [
+    `• ¿Qué es y de qué trata?: ${whatIs}`,
+    `• ¿Cómo funciona / Paso a paso?: ${howWorks}`,
+    `• ¿Por qué importa en el examen?: ${whyMatters}`
+  ].join('\n');
+
+  return { whatIs, howWorks, whyMatters, fullExplanation };
+}
+
+/**
+ * Sanitizes and structures example/formula strings into high-clarity items.
+ */
+export function sanitizeConceptExampleOrFormula(
+  rawExample: string,
+  title: string,
+  subject: string = ''
+): {
+  type: 'formula' | 'clinical_case' | 'practical_example';
+  title: string;
+  content: string;
+  syntax?: string;
+  variables?: string[];
+  clinicalContext?: string;
+} {
+  const cleanTitle = title.replace(/^[•\s\d\.\-\)]+/, '').trim();
+  const lowerTitle = cleanTitle.toLowerCase();
+
+  let cleaned = (rawExample || '')
+    .replace(/^===.*?===/g, '')
+    .replace(/^---.*?---/g, '')
+    .replace(/^Ejemplo extraído de tus apuntes:\s*---.*?---/i, '')
+    .replace(/^\[.*?\]/g, '')
+    .trim();
+
+  // If clean string is invalid, contains PDF markers, or is too short
+  if (!cleaned || cleaned.startsWith('===') || cleaned.startsWith('---') || cleaned.toLowerCase().includes('.pdf') || cleaned.length < 10) {
+    if (lowerTitle.includes('arteria') || lowerTitle.includes('tronco') || lowerTitle.includes('aorta')) {
+      cleaned = `Caso clínico / Reconocimiento: Disección y cateterismo de ${cleanTitle}, verificando el punto exacto de bifurcación y el área isquémica resultante en caso de ligadura.`;
+    } else if (lowerTitle.includes('linf') || lowerTitle.includes('timo')) {
+      cleaned = `Caso de correlación: Involución del timo en animales adultos frente a desarrollo marcado en animales jóvenes, y toma de biopsia en linfonodos de drenaje.`;
+    } else {
+      cleaned = `Aplicación práctica: Análisis de caso donde se identifica la estructura de ${cleanTitle}, delimitando sus relaciones topográficas y función fisiológica.`;
+    }
+  }
+
+  const isMathOrFormula = /[=><≈±≤≥]/.test(cleaned) || /\b(kg|m\/s|mol|Pa|kPa|bar|atm|V|mV|Hz|kHz|J|kJ|W|kW|N|cal|kcal)\b/i.test(cleaned);
+
+  if (isMathOrFormula) {
+    return {
+      type: 'formula',
+      title: `Fórmula / Relación Cuantitativa de ${cleanTitle}`,
+      content: cleaned,
+      syntax: cleaned,
+    };
+  }
+
+  const isClinical = lowerTitle.includes('arteria') || lowerTitle.includes('vena') || lowerTitle.includes('corazón') || lowerTitle.includes('médula') || lowerTitle.includes('timo') || cleaned.toLowerCase().includes('clínic') || cleaned.toLowerCase().includes('caso');
+
+  return {
+    type: isClinical ? 'clinical_case' : 'practical_example',
+    title: isClinical ? `Caso y Aplicación Clínica de ${cleanTitle}` : `Ejemplo Práctico de ${cleanTitle}`,
+    content: cleaned,
+    clinicalContext: isClinical ? `Correlación funcional y topográfica en ${subject || 'la materia'}` : undefined,
+  };
+}
+
+/**
  * Filters and strictly sorts Concepts by dayNumber in ascending order
  */
 export function getConceptsForDay(
@@ -199,17 +338,21 @@ export function getConceptsForDay(
 
   const mapped = safeConcepts.map((c: any, idx) => {
     const title = c?.title || c?.concept || 'Concepto clave';
-    const explanation = c?.explanation || c?.description || '';
-    const example = c?.exampleOrFormula || c?.example || c?.keyTakeaway || '';
-    const searchText = `${title} ${explanation} ${example}`;
+    const rawExplanation = c?.explanation || c?.description || '';
+    const rawExample = c?.exampleOrFormula || c?.example || c?.keyTakeaway || '';
+    
+    const sanitizedExp = sanitizeConceptExplanation(rawExplanation, title);
+    const sanitizedEx = sanitizeConceptExampleOrFormula(rawExample, title);
+
+    const searchText = `${title} ${sanitizedExp.fullExplanation} ${sanitizedEx.content}`;
     const assigned = determineDayNumber(c?.dayNumber, idx, safeConcepts.length, searchText, schedule);
     assignedDayMap.set(idx, assigned);
     return {
       ...c,
       title,
-      explanation,
+      explanation: sanitizedExp.fullExplanation,
       importance: c?.importance || 'high',
-      exampleOrFormula: example,
+      exampleOrFormula: sanitizedEx.content,
       dayNumber: assigned,
       _originalIndex: idx,
     };

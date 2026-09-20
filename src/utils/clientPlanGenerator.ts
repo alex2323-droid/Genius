@@ -1,4 +1,11 @@
 import type { ParsedFile } from './fileParser.ts';
+import { 
+  analyzeStudentDocuments, 
+  generateDistinctCoreConcepts,
+  generateDistinctDefinitionsAndFormulas,
+  computeMaterialComplexityProfile,
+  generateDistinctExercises
+} from './documentAnalyzer.ts';
 
 export interface ClientPlanGenerationParams {
   subject: string;
@@ -13,16 +20,11 @@ export function generateClientFallbackPlan(params: ClientPlanGenerationParams) {
   const { subject, daysLeft, targetGrade, studyHoursPerDay, files, customNotes } = params;
   const numDays = Math.min(Math.max(Number(daysLeft) || 3, 1), 30);
   const dailyHours = Number(studyHoursPerDay) || 2;
-
-  let allText = (files || []).map(f => f.text || '').join('\n');
-  if (customNotes) allText += '\n' + customNotes;
-
-  const lines = allText
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 10 && !l.startsWith('[Documento') && !l.startsWith('---'));
+  const gradeTarget = Number(targetGrade) || 85;
 
   const mainSubject = subject || (files && files[0]?.name ? files[0].name.replace(/\.[^/.]+$/, '') : 'Material de Estudio');
+  const docData = analyzeStudentDocuments(files, customNotes, mainSubject, gradeTarget, numDays, dailyHours);
+  const profile = computeMaterialComplexityProfile(files, customNotes, gradeTarget, numDays, dailyHours);
 
   const schedule: any[] = [];
   const coreConcepts: any[] = [];
@@ -31,153 +33,197 @@ export function generateClientFallbackPlan(params: ClientPlanGenerationParams) {
   const flashcards: any[] = [];
   const exercises: any[] = [];
 
-  const conceptsPerDay = targetGrade >= 90 
-    ? (numDays <= 3 ? 8 : 6) 
-    : targetGrade >= 75 
-    ? (numDays <= 3 ? 6 : 4) 
-    : (numDays <= 3 ? 4 : 3);
-
-  const trapCount = targetGrade >= 90 
-    ? (numDays <= 3 ? 6 : 4) 
-    : targetGrade >= 75 
-    ? (numDays <= 3 ? 4 : 3) 
-    : (numDays <= 3 ? 2 : 1);
-
-  const flashcardCount = targetGrade >= 90 
-    ? (numDays <= 3 ? 8 : 6) 
-    : targetGrade >= 75 
-    ? (numDays <= 3 ? 6 : 4) 
-    : (numDays <= 3 ? 4 : 3);
-
-  const exerciseCount = targetGrade >= 90 
-    ? (numDays <= 3 ? 6 : 5) 
-    : targetGrade >= 75 
-    ? (numDays <= 3 ? 4 : 3) 
-    : (numDays <= 3 ? 3 : 2);
+  const conceptsPerDay = profile.conceptsPerDay;
+  const trapCount = profile.trapsPerDay;
+  const flashcardCount = profile.flashcardsPerDay;
+  const exerciseCount = profile.exercisesPerDay;
 
   for (let day = 1; day <= numDays; day++) {
-    const lineIndex = (day - 1) * conceptsPerDay;
-    const primaryLine = lines[lineIndex % Math.max(1, lines.length)] || `Módulo y Clase del Día ${day}: Fundamentos de ${mainSubject}`;
-    const topic1 = primaryLine.length > 60 ? primaryLine.slice(0, 57) + '...' : primaryLine;
-    const dayTitle = `Clase Día ${day}: ${topic1}`;
+    const dayConcepts = generateDistinctCoreConcepts(
+      docData,
+      conceptsPerDay,
+      mainSubject,
+      gradeTarget,
+      day
+    );
+    coreConcepts.push(...dayConcepts);
+
+    const primaryConcept = dayConcepts[0]?.title || `Módulo Central de ${mainSubject}`;
+    const dayTitle = `Clase Día ${day}: ${primaryConcept}`;
+
+    // Total daily study minutes divided into 4 structured, non-trivial phases
+    const totalMinutes = Math.round(dailyHours * 60);
+    const readingMins = Math.round(totalMinutes * 0.35);
+    const formulaMins = Math.round(totalMinutes * 0.20);
+    const flashcardMins = Math.round(totalMinutes * 0.20);
+    const exerciseMins = totalMinutes - readingMins - formulaMins - flashcardMins;
 
     schedule.push({
       dayNumber: day,
       title: dayTitle,
-      focus: `Masterclass del Día ${day}: Dominio específico de ${topic1} enfocado en la nota meta de ${targetGrade}%.`,
+      focus: `Masterclass del Día ${day}: Dominio exhaustivo de ${primaryConcept} orientado a meta ${gradeTarget}% (${dailyHours}h dedicadas).`,
       estimatedHours: dailyHours,
       objectives: [
-        `Comprender detalladamente los fundamentos y deducciones de ${topic1}`,
-        `Analizar casos prácticos, ecuaciones y relaciones cuantitativas del Día ${day}`,
-        `Superar trampas de examen específicas y asegurar retención mediante tarjetas`
+        `Dominar los ${conceptsPerDay} postulados y mecanismos teóricos de ${primaryConcept}`,
+        `Memorizar activamente las ${flashcardCount} tarjetas de memoria de alta retención`,
+        `Superar las ${trapCount} trampas de examen identificadas para no perder puntos`,
+        `Resolver el banco de ${exerciseCount} ejercicios prácticos con criterio de corrección oficial`
       ],
-      keyTopics: [topic1, `Deducciones de ${mainSubject}`, `Ejercicios del Día ${day}`],
+      keyTopics: [primaryConcept, `Deducciones de ${mainSubject}`, `Ecuaciones y Trampas Día ${day}`],
       tasks: [
         {
           id: `task-${day}-1`,
-          task: `Clase Diaria Día ${day}: Lectura guiada y esquematización de ${topic1}`,
+          task: `Fase 1: Lectura analítica de los ${conceptsPerDay} conceptos clave y mecanismos causales de ${primaryConcept}`,
           type: 'read',
-          timeMinutes: Math.round(dailyHours * 30),
+          timeMinutes: readingMins,
           completed: false,
         },
         {
           id: `task-${day}-2`,
-          task: `Análisis de formulas, demostraciones y definiciones del Día ${day}`,
+          task: `Fase 2: Desglose de fórmulas, definiciones rigurosas y deducciones del Día ${day}`,
           type: 'summary',
-          timeMinutes: Math.round(dailyHours * 15),
+          timeMinutes: formulaMins,
           completed: false,
         },
         {
           id: `task-${day}-3`,
-          task: `Evaluación y resolución de ejercicios prácticos y tarjetas de la Clase ${day}`,
+          task: `Fase 3: Repaso espaciado con ${flashcardCount} tarjetas de memoria activa (6-10 cards)`,
           type: 'practice',
-          timeMinutes: Math.round(dailyHours * 15),
+          timeMinutes: flashcardMins,
+          completed: false,
+        },
+        {
+          id: `task-${day}-4`,
+          task: `Fase 4: Resolución del banco de ${exerciseCount} ejercicios y análisis de las ${trapCount} trampas de examen`,
+          type: 'practice',
+          timeMinutes: exerciseMins,
           completed: false,
         }
       ]
     });
 
-    for (let cIdx = 0; cIdx < conceptsPerDay; cIdx++) {
-      const globalConceptIdx = (day - 1) * conceptsPerDay + cIdx;
-      const rawText = lines[globalConceptIdx % Math.max(1, lines.length)] || `Principio Clave #${cIdx + 1} de la Clase ${day} (${mainSubject})`;
-      const conceptTitle = rawText.length > 50 ? rawText.slice(0, 47) + '...' : rawText;
+    // Generate Key Definitions and Formulas (6 to 10 per day)
+    // Generate Definitions and Formulas with verified document citations
+    const dayDefinitions = generateDistinctDefinitionsAndFormulas(
+      docData,
+      day,
+      profile.definitionsPerDay,
+      mainSubject
+    );
+    keyDefinitionsAndFormulas.push(...dayDefinitions);
 
-      coreConcepts.push({
-        title: `[Clase Día ${day}] ${conceptTitle}`,
-        explanation: `📌 Definición y Principio General:\n${rawText}. Este principio constituye uno de los pilares indispensables impartidos en la Clase Diaria del Día ${day} para ${mainSubject}.\n\n⚙️ Mecanismo de Funcionamiento y Proceso:\nAnaliza las variables fundamentales y la secuencia lógica necesaria para alcanzar una calificación meta de ${targetGrade}%. Requiere comprender la deducción paso a paso y la interconexión entre las condiciones de contorno de ${topic1}.\n\n💡 Aplicación Práctica y Casos Reales:\nAplicación directa en la resolución de problemas específicos del Día ${day}, permitiendo trasladar los principios abstractos a ejercicios de examen real.\n\n⚠️ Relevancia y Claves de Evaluación:\nPregunta de alta frecuencia en parciales. Evita asunciones no justificadas y mantén el rigor formal.`,
-        importance: cIdx === 0 ? 'critical' : cIdx === 1 ? 'high' : 'medium',
-        exampleOrFormula: `Modelo Teórico / Aplicación Práctica Día ${day}: Demostración de ${conceptTitle}`,
-        dayNumber: day,
-      });
-
-      keyDefinitionsAndFormulas.push({
-        term: `Regla de ${conceptTitle} (Día ${day})`,
-        definition: `Definición formal y alcance del concepto ${conceptTitle} enseñado en la Clase Diaria ${day} de ${mainSubject}.`,
-        formulaOrSyntax: `Ecuación / Sintaxis asociativa del Día ${day} (#${cIdx + 1})`,
-        dayNumber: day,
-      });
-    }
-
+    // Generate Common Exam Traps (5 to 8 per day)
     for (let tIdx = 0; tIdx < trapCount; tIdx++) {
+      const conceptForTrap = dayConcepts[tIdx % dayConcepts.length]?.title || primaryConcept;
+      const extractedTrap = docData.traps[(day - 1) * trapCount + tIdx];
+
       commonExamTraps.push({
         id: `trap-client-${day}-${tIdx + 1}`,
-        mistake: `Trampa de Examen #${tIdx + 1} (Día ${day}): Confundir supuestos de aplicación o simplificar variables en ${topic1}`,
-        correction: `Resolución Paso a Paso: Verificar explícitamente las condiciones iniciales, las unidades del enunciado y la consistencia matemática antes de responder.`,
-        whyItMatters: `Esta trampa es formulada habitualmente en exámenes de ${mainSubject} para penalizar respuestas precipitadas.`,
+        mistake: extractedTrap
+          ? `Trampa de Examen: ${extractedTrap}`
+          : `Trampa #${tIdx + 1} del Día ${day}: Confundir supuestos de contorno o simplificar variables sin justificación en ${conceptForTrap}.`,
+        correction: `Resolución Paso a Paso: 1. Comprobar las condiciones de validez del modelo. 2. Verificar consistencia dimensional de las variables. 3. Aplicar la relación teórica demostrada en la Guía del Día ${day}.`,
+        whyItMatters: `Los profesores utilizan esta trampa para diferenciar entre alumnos que solo memorizan fórmulas y quienes dominan la justificación causal a nivel ${gradeTarget}%.`,
         dayNumber: day,
       });
     }
 
+    // Generate 6 to 10 Flashcards per day, each targeting a distinct pedagogical angle
     for (let fIdx = 0; fIdx < flashcardCount; fIdx++) {
+      const c = dayConcepts[fIdx % dayConcepts.length];
+      const cardTypes = [
+        {
+          front: `[Día ${day} • Fundamento] ¿Cuál es la premisa central y el postulado que define a ${c.title}?`,
+          back: `${c.explanation.split('\n')[0] || c.title}. Clave de examen para asegurar la nota meta de ${gradeTarget}%.`,
+          category: `Fundamentos (Día ${day})`
+        },
+        {
+          front: `[Día ${day} • Mecanismo Operativo] ¿Cómo interactúan las variables y cuál es la secuencia causal en ${c.title}?`,
+          back: `${c.explanation.split('\n')[1] || `Interacción dinámica de parámetros según los modelos de ${mainSubject}.`}`,
+          category: `Mecanismos (Día ${day})`
+        },
+        {
+          front: `[Día ${day} • Ecuación / Caso] ¿Cuál es la relación cuantitativa o caso de aplicación de ${c.title}?`,
+          back: `${c.exampleOrFormula}. Siempre verificar unidades y límites de aplicabilidad.`,
+          category: `Fórmulas y Casos (Día ${day})`
+        },
+        {
+          front: `[Día ${day} • Justificación Teórica] ¿Cuál es el sustento científico o deductivo de ${c.title}?`,
+          back: `${c.explanation.split('\n')[2] || `Demostración analítica rigurosa respaldada por el temario de ${mainSubject}.`}`,
+          category: `Justificación (Día ${day})`
+        },
+        {
+          front: `[Día ${day} • Alerta de Trampa] ¿Qué error común cometen los estudiantes al responder sobre ${c.title}?`,
+          back: `Error clásico: Confundir condiciones de contorno o aplicar aproximaciones sin verificar supuestos iniciales.`,
+          category: `Trampas de Examen (Día ${day})`
+        },
+        {
+          front: `[Día ${day} • Criterio de Examen] Si en el examen te piden demostrar ${c.title}, ¿qué 3 pasos debes detallar?`,
+          back: `1. Definir premisas. 2. Desarrollar la deducción del mecanismo. 3. Validar con coherencia analítica y dimensional.`,
+          category: `Criterios de Evaluación (Día ${day})`
+        },
+        {
+          front: `[Día ${day} • Casos Límite] ¿Qué sucede con ${c.title} en condiciones extremas o cuando una variable tiende a cero?`,
+          back: `El sistema experimenta una transición analítica que exige revisar los supuestos del modelo formal.`,
+          category: `Casos Límite (Día ${day})`
+        },
+        {
+          front: `[Día ${day} • Comparativa] ¿En qué se diferencia ${c.title} de otros conceptos similares de ${mainSubject}?`,
+          back: `Se distingue por su régimen de aplicabilidad estricto y las condiciones de frontera específicas.`,
+          category: `Análisis Comparativo (Día ${day})`
+        },
+        {
+          front: `[Día ${day} • Demostración] ¿Cómo se deduce analíticamente la regla práctica asociada a ${c.title}?`,
+          back: `A través del balance general de magnitudes y el teorema fundamental aplicable en ${mainSubject}.`,
+          category: `Demostraciones (Día ${day})`
+        },
+        {
+          front: `[Día ${day} • Dominio Élite] Síntesis final de ${c.title}: ¿Por qué dominar este concepto asegura el ${gradeTarget}%?`,
+          back: `Porque integra simultáneamente la teoría, la deducción analítica y la resolución libre de trampas de examen.`,
+          category: `Maestría (Día ${day})`
+        }
+      ];
+
+      const selectedCard = cardTypes[fIdx % cardTypes.length];
+
       flashcards.push({
         id: `fc-client-${day}-${fIdx + 1}`,
-        front: `[Día ${day}] ¿Cuál es el concepto clave y la regla práctica #${fIdx + 1} referente a ${topic1}?`,
-        back: `Aplica la regla esencial de la Clase ${day}: Verifica detalladamente las condiciones requeridas para asegurar la nota meta de ${targetGrade}%.`,
-        category: `Clase Día ${day}`,
+        front: selectedCard.front,
+        back: selectedCard.back,
+        category: selectedCard.category,
         dayNumber: day,
       });
     }
 
-    const calcDifficulty = targetGrade >= 90 ? 'advanced' : targetGrade >= 75 ? 'intermediate' : 'basic';
-    const pointsValue = targetGrade >= 90 ? 15 : targetGrade >= 75 ? 10 : 5;
-
-    for (let eIdx = 0; eIdx < exerciseCount; eIdx++) {
-      const isMcq = eIdx % 2 === 0;
-      exercises.push({
-        id: `ex-client-${day}-${eIdx + 1}`,
-        type: isMcq ? 'mcq' : 'true_false',
-        difficulty: calcDifficulty,
-        dayNumber: day,
-        question: isMcq
-          ? `[Clase Día ${day} • Opción Múltiple #${eIdx + 1}] En el desarrollo de ${topic1}, ¿cuál es la proposición analítica exacta?`
-          : `[Clase Día ${day} • Verdadero/Falso #${eIdx + 1}] ¿Es verdadero que el principio de ${topic1} requiere verificar las condiciones de contorno antes de operar?`,
-        options: isMcq ? [
-          `Demuestra dominio de la Clase ${day} y sostiene el comportamiento del sistema de ${mainSubject}.`,
-          `Aplica únicamente al omitir las variables críticas de la jornada.`,
-          `Depende únicamente del porcentaje meta del estudiante (${targetGrade}%).`,
-          `Ninguna de las opciones anteriores es válida.`
-        ] : ['Verdadero', 'Falso'],
-        correctAnswer: isMcq 
-          ? `Demuestra dominio de la Clase ${day} y sostiene el comportamiento del sistema de ${mainSubject}.`
-          : 'Verdadero',
-        explanation: `Paso a Paso: Explicación directa respaldada por los conceptos impartidos en la Clase Diaria ${day} de ${topic1}.`,
-        hint: `Consulta la Guía del Día ${day} sobre ${topic1}.`,
-        points: pointsValue,
-      });
-    }
+    // Generate scaled, high-cognitive-depth exercises for this day (6 to 10 exercises per day)
+    const dayExercises = generateDistinctExercises(
+      docData,
+      day,
+      dayConcepts,
+      exerciseCount,
+      mainSubject,
+      profile,
+      gradeTarget
+    );
+    exercises.push(...dayExercises);
   }
 
   const aiCompetitionResult = {
     winnerModel: 'Motor de Análisis Documental y Pedagógico (Principal)',
     score: 99,
-    evaluationSummary: `Auditoría y calibración pedagógica completada. Logró la máxima profundidad teórica, separación clase por clase para los ${numDays} días y rigurosidad en los ejercicios del Día 1 al Día ${numDays}.`,
+    evaluationSummary: `Plan de estudio generado con éxito: ${coreConcepts.length} conceptos exhaustivos, ${flashcards.length} tarjetas de estudio (${flashcardCount} por día), ${exercises.length} ejercicios (${exerciseCount} por día) y ${commonExamTraps.length} trampas de examen (${trapCount} por día), calibrados para ${numDays} días y meta del ${gradeTarget}%.`,
     competingModels: [
       {
         name: 'Motor Neural de Análisis Documental',
         score: 99,
         status: 'Motor Principal 🏆',
-        badge: 'Máxima Profundidad y Estructura por Días',
-        strengths: [`Generación completa para ${numDays} días`, 'Explicaciones en 4 bloques estructurados', 'Ejercicios con soluciones paso a paso'],
+        badge: `Escala ${profile.tierLabel}`,
+        strengths: [
+          `${coreConcepts.length} conceptos analizados en 4 bloques`,
+          `${flashcards.length} tarjetas activas (${flashcardCount} por día)`,
+          `${exercises.length} ejercicios con soluciones paso a paso (${exerciseCount} por día)`,
+          `${commonExamTraps.length} trampas de examen analizadas`
+        ],
       },
       {
         name: 'Módulo de Inferencia Acelerada',
@@ -198,14 +244,22 @@ export function generateClientFallbackPlan(params: ClientPlanGenerationParams) {
   };
 
   return {
-    title: `Plan de Estudio de Clases Diarias: ${mainSubject}`,
+    title: `Plan de Estudio: ${mainSubject}`,
     subject: mainSubject,
-    strategySummary: `Plan de Clases Diarias estructurado para ${numDays} días y nota objetivo de ${targetGrade}%. Optimizado mediante el Agente de Análisis Documental.`,
+    strategySummary: `Plan calibrado para ${numDays} días, ${dailyHours}h/día y meta del ${gradeTarget}%. ${profile.rationaleText}`,
     recommendedDailyHours: dailyHours,
     totalEstimatedHours: numDays * dailyHours,
+    fileNames: files ? files.map(f => f.name) : [],
+    sourceDocuments: files ? files.map(f => ({
+      fileName: f.name,
+      snippet: f.text ? f.text.slice(0, 1000) : '',
+      fullText: f.text || '',
+      totalWords: f.wordCount || (f.text ? f.text.split(/\s+/).length : 0),
+      slideCount: f.slideCount || 0,
+    })) : [],
     schedule,
     studyGuide: {
-      executiveSummary: `Guía maestra y clases diarias estructuradas para dominar ${mainSubject} en ${numDays} días.`,
+      executiveSummary: `Guía maestra estructurada para dominar ${mainSubject} en ${numDays} días con meta del ${gradeTarget}%. Incluye explicaciones extensas, ${flashcardCount} tarjetas diarias (6-10), ${exerciseCount} ejercicios por jornada y ${trapCount} trampas de examen.`,
       coreConcepts,
       keyDefinitionsAndFormulas,
       commonExamTraps,
@@ -214,5 +268,13 @@ export function generateClientFallbackPlan(params: ClientPlanGenerationParams) {
     exercises,
     providerUsed: 'Agente de Análisis Documental y Pedagógico',
     aiCompetitionResult,
+    materialComplexity: {
+      tier: profile.complexityTier,
+      tierLabel: profile.tierLabel,
+      totalWords: profile.totalWords,
+      fileCount: profile.fileCount,
+      multiplier: profile.complexityMultiplier,
+      explanation: profile.rationaleText,
+    },
   };
 }

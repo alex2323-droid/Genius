@@ -57,6 +57,7 @@ import { BottomNav } from './components/BottomNav.tsx';
 import { useCustomLogo } from './utils/logoStorage.ts';
 import { checkNewAchievements, getPlanAchievements } from './utils/achievementManager.ts';
 import { generateClientFallbackPlan } from './utils/clientPlanGenerator.ts';
+import { ensureFullPlanCoverage } from './utils/documentAnalyzer.ts';
 import type { Achievement } from './types/study.ts';
 
 const LOCAL_STORAGE_KEY = 'estudia_genius_plans_cache';
@@ -201,7 +202,7 @@ export function normalizeStudyPlan(raw: any): StudyPlan {
     aiCompetitionResult: raw.aiCompetitionResult || undefined,
   };
 
-  return planObj;
+  return ensureFullPlanCoverage(planObj, undefined, planObj.subject, planObj.targetGrade, planObj.daysLeft);
 }
 
 export default function App() {

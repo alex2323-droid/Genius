@@ -11,14 +11,25 @@ import {
   CheckCircle2, 
   AlertCircle,
   AlertTriangle,
+  AlertOctagon,
+  FileX2,
   HelpCircle,
   Layers,
   ArrowRight,
-  ExternalLink
+  ExternalLink,
+  BarChart2,
+  BookOpen
 } from 'lucide-react';
-import { parseUploadedFile, type ParsedFile } from '../utils/fileParser.ts';
+import { 
+  parseUploadedFile, 
+  validateDocumentFile,
+  type ParsedFile, 
+  type FileValidationResult 
+} from '../utils/fileParser.ts';
 import { ObsoleteFormatModal } from './ObsoleteFormatModal.tsx';
+import { FileValidationWarningModal } from './FileValidationWarningModal.tsx';
 import { MultiAISelector } from './MultiAISelector.tsx';
+import { computeMaterialComplexityProfile } from '../utils/documentAnalyzer.ts';
 
 import { useCustomLogo } from '../utils/logoStorage.ts';
 
@@ -47,39 +58,86 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
   const [targetGrade, setTargetGrade] = useState<number>(85);
   const [studyHoursPerDay, setStudyHoursPerDay] = useState<number>(2);
   const [customNotes, setCustomNotes] = useState('');
-  const [selectedProvider, setSelectedProvider] = useState<string>('auto');
+  const [selectedProvider, setSelectedProvider] = useState<string>('gemini');
   const [files, setFiles] = useState<ParsedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [obsoleteFilePrompt, setObsoleteFilePrompt] = useState<ParsedFile | null>(null);
   const [isObsoleteModalOpen, setIsObsoleteModalOpen] = useState(false);
+  const [validationIssues, setValidationIssues] = useState<Array<{ fileName: string; result: FileValidationResult }>>([]);
+  const [isValidationModalOpen, setIsValidationModalOpen] = useState(false);
   const currentLogo = useCustomLogo();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const complexityProfile = computeMaterialComplexityProfile(files, customNotes, targetGrade, daysLeft);
 
   const handleFiles = async (selectedFiles: FileList | File[]) => {
     setParseError(null);
     setIsParsing(true);
     const parsedList: ParsedFile[] = [];
+    const issues: Array<{ fileName: string; result: FileValidationResult }> = [];
 
     for (let i = 0; i < selectedFiles.length; i++) {
       const file = selectedFiles[i];
+
+      // 1. PRE-UPLOAD VALIDATION: Check for empty 0-byte or corrupted headers
+      const validation = await validateDocumentFile(file);
+      if (!validation.isValid) {
+        issues.push({
+          fileName: file.name,
+          result: validation,
+        });
+        continue; // Skip damaged or 0-byte file from processing
+      }
+
       try {
         const parsed = await parseUploadedFile(file);
+        parsed.validationStatus = 'valid';
         parsedList.push(parsed);
       } catch (err: any) {
         console.error('Error parsing file:', err);
-        setParseError(`No se pudo leer el archivo ${file.name}.`);
+        issues.push({
+          fileName: file.name,
+          result: {
+            isValid: false,
+            isCorrupted: true,
+            isEmpty: false,
+            isUnsupported: false,
+            status: 'corrupted',
+            title: 'Error de extracción de contenido',
+            message: `El archivo "${file.name}" está dañado o tiene un formato no estándar.`,
+            details: err?.message || 'Error durante el procesamiento binario.',
+            suggestedAction: 'Convierte el archivo a PDF antes de subirlo.',
+            fixGuide: [
+              'Abre el archivo original en tu lector habitual.',
+              'Exporta o imprime como PDF limpio.',
+              'Vuelve a subir el PDF generado.'
+            ],
+            safeSize: file.size,
+          }
+        });
       }
     }
 
-    setFiles(prev => [...prev, ...parsedList]);
+    if (parsedList.length > 0) {
+      setFiles(prev => [...prev, ...parsedList]);
+    }
     setIsParsing(false);
 
-    // Check if any of the newly parsed files is an obsolete format
+    // If there were validation issues (damaged/empty files), show clear warning modal
+    if (issues.length > 0) {
+      setValidationIssues(issues);
+      setIsValidationModalOpen(true);
+      if (parsedList.length === 0) {
+        setParseError(`Se detectaron ${issues.length} archivo(s) vacío(s) o dañado(s) que no pudieron ser procesados.`);
+      }
+    }
+
+    // Check if any of the valid parsed files is an obsolete format
     const firstObsolete = parsedList.find(f => f.isObsolete);
-    if (firstObsolete) {
+    if (firstObsolete && issues.length === 0) {
       setObsoleteFilePrompt(firstObsolete);
       setIsObsoleteModalOpen(true);
     }
@@ -372,7 +430,12 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
                           )}
                         </div>
                         <div className="overflow-hidden">
-                          <p className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">{file.name}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate max-w-[200px] sm:max-w-xs">{file.name}</p>
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                              <CheckCircle2 className="w-2.5 h-2.5" /> Verificado
+                            </span>
+                          </div>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400">
                             {(file.size / 1024).toFixed(0)} KB
                             {file.slideCount ? ` • ${file.slideCount} diapositivas` : ''}
@@ -586,6 +649,78 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
           </div>
         </div>
 
+        {/* Dynamic Material Volume & Complexity Engine Card */}
+        {files.length > 0 && (
+          <div className="rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-linear-to-br from-blue-50/80 via-indigo-50/50 to-slate-50 dark:from-blue-950/40 dark:via-indigo-950/30 dark:to-slate-900/40 p-4 sm:p-5 shadow-xs transition-all">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-blue-200/70 dark:border-blue-800/40">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <BarChart2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                      Escalado por Volumen de Material
+                    </h3>
+                    <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-full bg-blue-600 text-white tracking-wide">
+                      {complexityProfile.tierLabel}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    A mayor cantidad de material proporcionado, más larga y profunda es la guía y mayor la complejidad de los ejercicios.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 self-start sm:self-auto bg-white/80 dark:bg-slate-800/80 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                <span>Multiplicador:</span>
+                <span className="font-extrabold">{complexityProfile.complexityMultiplier}x</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mt-3.5">
+              <div className="bg-white/90 dark:bg-slate-800/90 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Volumen Detectado</p>
+                <p className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                  ~{complexityProfile.totalWords.toLocaleString()}
+                  <span className="text-xs font-normal text-slate-500 ml-1">palabras</span>
+                </p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{complexityProfile.fileCount} documento(s)</p>
+              </div>
+
+              <div className="bg-white/90 dark:bg-slate-800/90 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Longitud de Guía</p>
+                <p className="text-base sm:text-lg font-black text-blue-600 dark:text-blue-400 mt-0.5">
+                  {complexityProfile.conceptsPerDay * daysLeft}
+                  <span className="text-xs font-normal text-slate-500 ml-1">conceptos</span>
+                </p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{complexityProfile.conceptsPerDay} por día</p>
+              </div>
+
+              <div className="bg-white/90 dark:bg-slate-800/90 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Banco de Ejercicios</p>
+                <p className="text-base sm:text-lg font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
+                  {complexityProfile.exercisesPerDay * daysLeft}
+                  <span className="text-xs font-normal text-slate-500 ml-1">problemas</span>
+                </p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{complexityProfile.exercisesPerDay} por día</p>
+              </div>
+
+              <div className="bg-white/90 dark:bg-slate-800/90 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Nivel de Ejercicios</p>
+                <p className="text-xs sm:text-sm font-black text-amber-600 dark:text-amber-400 mt-1 truncate">
+                  {complexityProfile.complexityTier === 'mastery_heavy' ? 'Máster / Multivariable' : complexityProfile.complexityTier === 'extended' ? 'Avanzado con Casos' : 'Estándar Universitario'}
+                </p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Calibrado al {targetGrade}%</p>
+              </div>
+            </div>
+
+            <div className="mt-3 text-xs text-slate-600 dark:text-slate-300 bg-blue-100/50 dark:bg-blue-950/40 px-3 py-2 rounded-xl flex items-center gap-2">
+              <span className="font-semibold text-blue-700 dark:text-blue-300 shrink-0">Calibración:</span>
+              <span className="truncate">{complexityProfile.rationaleText}</span>
+            </div>
+          </div>
+        )}
+
         {/* Multi-AI Resilience & Redundancy Selector */}
         <MultiAISelector
           selectedProvider={selectedProvider}
@@ -633,6 +768,13 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
             fileInputRef.current?.click();
           }, 300);
         }}
+      />
+
+      {/* Pre-upload file validation warning modal for damaged or empty files */}
+      <FileValidationWarningModal
+        isOpen={isValidationModalOpen}
+        onClose={() => setIsValidationModalOpen(false)}
+        validationIssues={validationIssues}
       />
     </div>
   );

@@ -1,11 +1,35 @@
 import JSZip from 'jszip';
 import mammoth from 'mammoth';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Configure pdfjs worker if in browser
+if (typeof window !== 'undefined') {
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || '4.10.38'}/pdf.worker.min.mjs`;
+  } catch {
+    // Fallback if worker cannot be initialized
+  }
+}
 
 export interface ConverterLink {
   name: string;
   url: string;
   description: string;
   recommended?: boolean;
+}
+
+export interface FileValidationResult {
+  isValid: boolean;
+  isCorrupted: boolean;
+  isEmpty: boolean;
+  isUnsupported: boolean;
+  status: 'valid' | 'corrupted' | 'empty' | 'unsupported' | 'warning';
+  title: string;
+  message: string;
+  details?: string;
+  suggestedAction?: string;
+  fixGuide?: string[];
+  safeSize: number;
 }
 
 export interface ParsedFile {
@@ -20,6 +44,151 @@ export interface ParsedFile {
   wordCount?: number;
   isObsolete?: boolean;
   obsoleteReason?: string;
+  validationStatus?: 'valid' | 'warning' | 'corrupted' | 'empty';
+  validationMessage?: string;
+}
+
+export const SUPPORTED_EXTENSIONS = ['pdf', 'pptx', 'ppt', 'docx', 'doc', 'txt', 'md', 'rtf', 'odt', 'odp', 'ods', 'csv'];
+
+/**
+ * Validates a file BEFORE or DURING reading to detect zero-byte files,
+ * corrupt binary headers, empty unreadable text streams, or encrypted locks.
+ */
+export async function validateDocumentFile(file: File): Promise<FileValidationResult> {
+  const extension = file.name.split('.').pop()?.toLowerCase() || '';
+  const size = file.size || 0;
+
+  // 1. Check for 0 byte / empty files
+  if (size === 0) {
+    return {
+      isValid: false,
+      isCorrupted: false,
+      isEmpty: true,
+      isUnsupported: false,
+      status: 'empty',
+      title: 'Archivo completamente vacío (0 bytes)',
+      message: `El archivo "${file.name}" no contiene datos (tamaño: 0 bytes).`,
+      details: 'El archivo subido está en blanco o se descargó de manera incompleta.',
+      suggestedAction: 'Verifica que el archivo no esté vacío en tu dispositivo antes de volver a adjuntarlo.',
+      fixGuide: [
+        'Abre el archivo en tu computadora para confirmar que tenga contenido visible.',
+        'Si lo descargaste del campus virtual o WhatsApp, vuelve a descargarlo.',
+        'Guarda una nueva copia desde Word, PowerPoint o Acrobat Reader.'
+      ],
+      safeSize: size,
+    };
+  }
+
+  // 2. Read first bytes (magic numbers) to detect corruption
+  try {
+    const headerSlice = await file.slice(0, Math.min(size, 8192)).arrayBuffer();
+    const headerBytes = new Uint8Array(headerSlice);
+
+    if (headerBytes.length === 0) {
+      return {
+        isValid: false,
+        isCorrupted: true,
+        isEmpty: true,
+        isUnsupported: false,
+        status: 'corrupted',
+        title: 'Documento dañado o ilegible',
+        message: `El archivo "${file.name}" no pudo ser leído por el navegador.`,
+        details: 'El flujo de bytes está corrupto o bloqueado por el sistema de archivos.',
+        suggestedAction: 'Guarda el archivo nuevamente con otro nombre y vuelve a subirlo.',
+        safeSize: size,
+      };
+    }
+
+    // PDF Magic number: %PDF- (0x25, 0x50, 0x44, 0x46, 0x2D)
+    if (extension === 'pdf') {
+      const isPdfHeader = 
+        headerBytes.length >= 4 && 
+        headerBytes[0] === 0x25 && 
+        headerBytes[1] === 0x50 && 
+        headerBytes[2] === 0x44 && 
+        headerBytes[3] === 0x46;
+
+      if (!isPdfHeader) {
+        // Maybe someone renamed an .exe, .html or corrupt download to .pdf
+        const latin1 = new TextDecoder('latin1').decode(headerBytes.slice(0, 100));
+        const isHtmlError = /<!DOCTYPE html|<html|<head|<script/i.test(latin1);
+        
+        return {
+          isValid: false,
+          isCorrupted: true,
+          isEmpty: false,
+          isUnsupported: false,
+          status: 'corrupted',
+          title: 'Archivo PDF dañado o encabezado inválido',
+          message: `"${file.name}" no es un documento PDF válido o su cabecera está dañada.`,
+          details: isHtmlError 
+            ? 'El archivo parece ser una página de error HTML descargada en lugar del PDF real (común en campus virtuales que requieren inicio de sesión).' 
+            : 'Falta la firma estándar %PDF- en el archivo.',
+          suggestedAction: isHtmlError
+            ? 'Inicia sesión en tu aula virtual y descarga el documento PDF directamente.'
+            : 'Abre el archivo en un lector de PDF y guárdalo como una copia nueva.',
+          fixGuide: [
+            'Abre el archivo original en tu visor de PDF (Adobe Acrobat, Chrome, etc.).',
+            'Haz clic en "Guardar como..." o "Imprimir en PDF" para generar una copia limpia y válida.',
+            'Vuelve a cargar la nueva copia generada.'
+          ],
+          safeSize: size,
+        };
+      }
+    }
+
+    // PPTX / DOCX Zip magic number: PK (0x50, 0x4B)
+    if (extension === 'pptx' || extension === 'docx' || extension === 'odt' || extension === 'odp') {
+      const isZipHeader = 
+        headerBytes.length >= 2 && 
+        headerBytes[0] === 0x50 && 
+        headerBytes[1] === 0x4B;
+
+      if (!isZipHeader) {
+        return {
+          isValid: false,
+          isCorrupted: true,
+          isEmpty: false,
+          isUnsupported: false,
+          status: 'corrupted',
+          title: `Documento .${extension.toUpperCase()} corrupto`,
+          message: `El archivo "${file.name}" no tiene la estructura de paquete Office OpenXML válida.`,
+          details: 'El archivo está truncado, dañado o renombrado desde una extensión no compatible.',
+          suggestedAction: 'Abre el archivo en Microsoft Office / Google Docs y expórtalo como PDF o DOCX/PPTX nuevo.',
+          fixGuide: [
+            'Abre la presentación o documento en Word / PowerPoint / Google Docs.',
+            'Exporta o descarga el archivo en formato PDF.',
+            'Sube el PDF generado para un procesamiento óptimo.'
+          ],
+          safeSize: size,
+        };
+      }
+    }
+
+  } catch (err: any) {
+    return {
+      isValid: false,
+      isCorrupted: true,
+      isEmpty: false,
+      isUnsupported: false,
+      status: 'corrupted',
+      title: 'Error de acceso al archivo local',
+      message: `No se pudo leer el archivo "${file.name}": ${err?.message || 'Error de I/O local'}.`,
+      suggestedAction: 'Comprueba los permisos del archivo o cópialo a otra carpeta antes de subirlo.',
+      safeSize: size,
+    };
+  }
+
+  return {
+    isValid: true,
+    isCorrupted: false,
+    isEmpty: false,
+    isUnsupported: false,
+    status: 'valid',
+    title: 'Archivo verificado correctamente',
+    message: `El documento "${file.name}" tiene una estructura válida y lista para analizar.`,
+    safeSize: size,
+  };
 }
 
 export const OBSOLETE_EXTENSIONS = ['doc', 'ppt', 'xls', 'rtf', 'odt', 'odp', 'ods', 'wps', 'pages', 'key'];
@@ -123,7 +292,7 @@ export async function parseUploadedFile(file: File): Promise<ParsedFile> {
 
   try {
     if (extension === 'pdf') {
-      // For PDF, convert to base64 for native Gemini multimodal document processing
+      // 1. Convert to base64 for native multimodal AI processing
       const bytes = new Uint8Array(arrayBuffer);
       let binary = '';
       const len = bytes.byteLength;
@@ -131,7 +300,10 @@ export async function parseUploadedFile(file: File): Promise<ParsedFile> {
         binary += String.fromCharCode(bytes[i]);
       }
       base64 = btoa(binary);
-      extractedText = `[Documento PDF: ${file.name} - ${Math.round(file.size / 1024)} KB listo para análisis multimodal]`;
+
+      // 2. Extract real readable text from PDF streams and printable text
+      const pdfText = await extractTextFromPdf(arrayBuffer, file.name);
+      extractedText = pdfText || `[Documento PDF: ${file.name} - ${Math.round(file.size / 1024)} KB listo para análisis multimodal]`;
     } else if (extension === 'pptx') {
       // PowerPoint OpenXML format
       const zip = await JSZip.loadAsync(arrayBuffer);
@@ -242,4 +414,136 @@ function extractPrintableStrings(buffer: ArrayBuffer, minLength = 4): string {
   }
 
   return strings.join('\n');
+}
+
+/**
+ * Extracts readable text, definitions, headings, and equations from a PDF document buffer
+ * using pdfjs-dist with fallback to stream parsing.
+ */
+async function extractTextFromPdf(buffer: ArrayBuffer, fileName: string): Promise<string> {
+  // 1. First attempt with pdfjs-dist for complete page-by-page text
+  try {
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(buffer),
+      disableFontFace: true,
+      useSystemFonts: true,
+    });
+    const pdf = await loadingTask.promise;
+    const pageTexts: string[] = [];
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageStrings = textContent.items
+        .map((item: any) => ('str' in item ? item.str : ''))
+        .filter((s: string) => s.trim().length > 0);
+
+      if (pageStrings.length > 0) {
+        pageTexts.push(`--- Diapositiva / Página ${i} ---\n` + pageStrings.join(' '));
+      }
+    }
+
+    if (pageTexts.length > 0) {
+      const fullText = pageTexts.join('\n\n').trim();
+      if (fullText.length > 30) {
+        return fullText;
+      }
+    }
+  } catch (pdfJsErr) {
+    console.warn(`Extracción con pdfjs falló para ${fileName}, usando fallback:`, pdfJsErr);
+  }
+
+  // 2. Fallback stream parser
+  try {
+    const bytes = new Uint8Array(buffer);
+    const latin1Decoder = new TextDecoder('latin1');
+    const rawContent = latin1Decoder.decode(bytes);
+
+    const extractedChunks: string[] = [];
+
+    // Direct extraction of PDF text operators: (Text) Tj and [(Text)] TJ
+    const tjMatches = rawContent.match(/\(([^()]{2,300})\)\s*Tj/gi) || [];
+    for (const tm of tjMatches) {
+      const inner = tm.replace(/^\(/, '').replace(/\)\s*Tj$/i, '').trim();
+      const cleaned = cleanPdfString(inner);
+      if (cleaned.length > 2 && /[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9]/.test(cleaned)) {
+        extractedChunks.push(cleaned);
+      }
+    }
+
+    const arrayMatches = rawContent.match(/\[(.*?)\]\s*TJ/gi) || [];
+    for (const am of arrayMatches) {
+      const innerParen = am.match(/\(([^()]+)\)/g) || [];
+      const combined = innerParen
+        .map(p => cleanPdfString(p.replace(/[()]/g, '')))
+        .filter(s => s.length > 0)
+        .join(' ')
+        .trim();
+      if (combined.length > 2 && /[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9]/.test(combined)) {
+        extractedChunks.push(combined);
+      }
+    }
+
+    // Extract Document Metadata (Title, Subject, Author, Outlines)
+    const metaMatches = rawContent.match(/\/(Title|Subject|Author|Keywords)\s*\(([^()]{2,200})\)/gi) || [];
+    for (const mm of metaMatches) {
+      const val = mm.replace(/^\/(Title|Subject|Author|Keywords)\s*\(/i, '').replace(/\)$/, '').trim();
+      const cleaned = cleanPdfString(val);
+      if (cleaned.length > 3) {
+        extractedChunks.unshift(cleaned);
+      }
+    }
+
+    // Extract text inside Begin Text / End Text (BT ... ET) blocks
+    const btMatches = rawContent.match(/BT[\r\n]+([\s\S]*?)[\r\n]+ET/g) || [];
+    for (const bt of btMatches.slice(0, 80)) {
+      const parens = bt.match(/\(([^()]{2,200})\)/g) || [];
+      const btText = parens
+        .map(p => cleanPdfString(p.slice(1, -1)))
+        .filter(s => s.length > 1 && /[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(s))
+        .join(' ')
+        .trim();
+      if (btText.length > 5) {
+        extractedChunks.push(btText);
+      }
+    }
+
+    // If operator/metadata extraction yielded sufficient text
+    const operatorText = extractedChunks.join(' ').replace(/\s+/g, ' ').trim();
+    if (operatorText.length > 120) {
+      return `[Documento PDF: ${fileName}]\n\n${operatorText}`;
+    }
+
+    // Clean printable strings extraction
+    const rawStrings = extractPrintableStrings(buffer, 4);
+    const validLines = rawStrings
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => {
+        if (l.startsWith('/Type') || l.startsWith('/Pages') || l.startsWith('/Font') || l.startsWith('<<') || l.endsWith('>>')) return false;
+        if (l.startsWith('xref') || l.startsWith('trailer') || l.startsWith('startxref') || /^\d+\s+\d+\s+obj/i.test(l)) return false;
+        if (l.startsWith('/MediaBox') || l.startsWith('/CropBox') || l.startsWith('/Contents') || l.startsWith('/Resources')) return false;
+        return l.length > 6 && /[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(l);
+      });
+
+    const fallbackResult = validLines.slice(0, 500).join('\n');
+    if (fallbackResult.length > 80) {
+      return `[Documento PDF: ${fileName}]\n\n${fallbackResult}`;
+    }
+
+    return `[Documento PDF: ${fileName} - ${Math.round(bytes.byteLength / 1024)} KB listo para análisis multimodal]`;
+  } catch (err) {
+    console.warn(`Extracción de texto para PDF ${fileName}:`, err);
+    return `[Documento PDF: ${fileName} listo para análisis multimodal]`;
+  }
+}
+
+function cleanPdfString(str: string): string {
+  return str
+    .replace(/\\([0-7]{3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)))
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '')
+    .replace(/\\t/g, ' ')
+    .replace(/\\([()\\])/g, '$1')
+    .trim();
 }

@@ -20,12 +20,22 @@ export interface DailyScheduleDay {
   tasks: DailyTask[];
 }
 
+export interface DocumentCitation {
+  fileName?: string;
+  sectionTitle?: string;
+  exactQuote: string;
+  pageOrSlide?: string | number;
+  relevance?: string;
+  characterOffset?: number;
+}
+
 export interface CoreConcept {
   title: string;
   explanation: string;
   importance: 'critical' | 'high' | 'medium';
   exampleOrFormula?: string;
   dayNumber?: number;
+  sourceCitation?: DocumentCitation;
 }
 
 export interface DefinitionOrFormula {
@@ -33,6 +43,7 @@ export interface DefinitionOrFormula {
   definition: string;
   formulaOrSyntax?: string;
   dayNumber?: number;
+  sourceCitation?: DocumentCitation;
 }
 
 export interface Flashcard {
@@ -70,6 +81,8 @@ export interface Exercise {
   hint: string;
   points: number;
   dayNumber?: number;
+  cognitiveLevel?: 'analysis' | 'evaluation' | 'application';
+  caseContext?: string;
 }
 
 export interface Achievement {
@@ -81,6 +94,15 @@ export interface Achievement {
   unlockedAt?: string;
   progressPercent: number; // 0-100
   requirementText: string;
+}
+
+export interface MaterialComplexityMeta {
+  tier: 'compact' | 'standard' | 'extended' | 'mastery_heavy';
+  tierLabel: string;
+  totalWords: number;
+  fileCount: number;
+  multiplier: number;
+  explanation: string;
 }
 
 export interface StudyPlan {
@@ -105,6 +127,14 @@ export interface StudyPlan {
   providerUsed?: string;
   providerId?: string;
   aiCompetitionResult?: AICompetitionResult;
+  materialComplexity?: MaterialComplexityMeta;
+  sourceDocuments?: Array<{
+    fileName: string;
+    snippet?: string;
+    fullText?: string;
+    totalWords?: number;
+    slideCount?: number;
+  }>;
 }
 
 export interface CompetingAIModel {
@@ -132,6 +162,8 @@ export interface AIProviderInfo {
   isPrimary?: boolean;
   requiresPaidCredits?: boolean;
   isFree?: boolean;
+  creditExhausted?: boolean;
+  creditNotice?: string;
 }
 
 export interface QuizAttempt {

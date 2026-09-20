@@ -33,7 +33,7 @@ export const MultiAISelector: React.FC<MultiAISelectorProps> = ({
   onSelectProvider,
   disabled,
 }) => {
-  const [provider, setProvider] = useState<AIProviderInfo>(DEFAULT_GEMINI_PROVIDER);
+  const [providers, setProviders] = useState<AIProviderInfo[]>([DEFAULT_GEMINI_PROVIDER]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -46,11 +46,7 @@ export const MultiAISelector: React.FC<MultiAISelectorProps> = ({
       const res = await fetch('/api/providers-status');
       const data = await res.json();
       if (data.success && Array.isArray(data.providers) && data.providers.length > 0) {
-        // Only keep providers that do NOT require paid credits
-        const freeProviders = data.providers.filter((p: any) => !p.requiresPaidCredits);
-        if (freeProviders.length > 0) {
-          setProvider(freeProviders[0]);
-        }
+        setProviders(data.providers);
       }
     } catch (err) {
       console.warn('Could not fetch AI providers status:', err);
@@ -74,11 +70,11 @@ export const MultiAISelector: React.FC<MultiAISelectorProps> = ({
               </h3>
               <span className="px-2 py-0.5 text-[10px] font-black uppercase tracking-wider rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                Sin Créditos de Pago
+                Respaldo Automático
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Generación académica activa y disponible de forma ilimitada y gratuita.
+              Generación multimodal con soporte para Google Gemini y Anthropic Claude (Messages API).
             </p>
           </div>
         </div>
@@ -87,61 +83,73 @@ export const MultiAISelector: React.FC<MultiAISelectorProps> = ({
           type="button"
           onClick={fetchProvidersStatus}
           disabled={isLoading || disabled}
-          title="Verificar conexión activa con el Agente de Análisis"
+          title="Verificar conexión activa con los motores de IA"
           className="self-end sm:self-auto px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-xl bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all flex items-center gap-1.5 cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-          <span>Estado Conexión</span>
+          <span>Verificar Estado</span>
         </button>
       </div>
 
-      {/* Main Active Provider Card: Agente de Análisis */}
-      <div 
-        onClick={() => !disabled && onSelectProvider('gemini')}
-        className="p-4 rounded-2xl bg-gradient-to-br from-blue-50/80 via-indigo-50/40 to-slate-50 dark:from-blue-950/40 dark:via-indigo-950/20 dark:to-slate-900/40 border border-blue-200 dark:border-blue-800/80 shadow-xs relative"
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-extrabold text-blue-900 dark:text-blue-100">
-                {provider.name}
-              </span>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-blue-100/80 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 border border-blue-300 dark:border-blue-700">
-                {provider.model}
-              </span>
-            </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl">
-              {provider.description}
-            </p>
-          </div>
+      {/* Provider Cards */}
+      <div className="space-y-3">
+        {providers.map((p) => {
+          const isSelected = selectedProvider === p.id || (selectedProvider === '' && p.isPrimary);
+          return (
+            <div
+              key={p.id}
+              onClick={() => !disabled && onSelectProvider(p.id)}
+              className={`p-4 rounded-2xl border transition-all cursor-pointer relative ${
+                isSelected
+                  ? 'bg-blue-50/70 dark:bg-blue-950/40 border-blue-400 dark:border-blue-700 shadow-xs ring-1 ring-blue-400/50'
+                  : 'bg-slate-50/60 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                      {p.name}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300">
+                      {p.model}
+                    </span>
+                    {p.isPrimary && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                        Por Defecto
+                      </span>
+                    )}
+                    {p.isFree && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                        Gratuito
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed max-w-2xl">
+                    {p.description}
+                  </p>
+                </div>
 
-          <div className="shrink-0 flex items-center gap-2">
-            <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-500/30 flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Conectado y Listo</span>
+                <div className="shrink-0 flex items-center gap-2">
+                  {p.creditExhausted ? (
+                    <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300">
+                      <span>Sin saldo (Usa Gemini)</span>
+                    </div>
+                  ) : p.configured ? (
+                    <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-500/30 flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>{isSelected ? 'Seleccionado' : 'Disponible'}</span>
+                    </div>
+                  ) : (
+                    <div className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400">
+                      <span>Requiere API Key</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-
-        {/* Feature Badges */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 mt-3 border-t border-blue-100 dark:border-blue-900/50">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-            <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-            <span>PDFs & Diapositivas</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-            <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span>Respuesta en Segundos</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-            <span>Cero Coste de Créditos</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-            <Cpu className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-            <span>Sub-modelos de Respaldo</span>
-          </div>
-        </div>
+          );
+        })}
       </div>
     </div>
   );

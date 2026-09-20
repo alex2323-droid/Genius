@@ -48,6 +48,16 @@ const handleGeneratePlanRequest = async (req: Request, res: Response) => {
     } = req.body;
 
     let processedFiles = Array.isArray(files) ? files : [];
+    
+    // Filter out corrupted or zero-length files on server side
+    processedFiles = processedFiles.filter((f: any) => {
+      if (!f || typeof f !== 'object') return false;
+      const hasText = typeof f.text === 'string' && f.text.trim().length > 0;
+      const hasBase64 = typeof f.base64 === 'string' && f.base64.trim().length > 0;
+      const hasValidSize = typeof f.size === 'number' ? f.size > 0 : true;
+      return (hasText || hasBase64) && hasValidSize;
+    });
+
     if (processedFiles.length === 0) {
       processedFiles = [
         {
