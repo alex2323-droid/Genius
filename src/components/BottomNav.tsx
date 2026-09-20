@@ -12,7 +12,8 @@ import {
   LogOut, 
   LogIn, 
   X,
-  Palette
+  Palette,
+  BarChart2
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext.tsx';
 import { PWAInstallButton } from './PWAInstallButton.tsx';
@@ -32,6 +33,7 @@ interface BottomNavProps {
   onOpenProfileModal: () => void;
   onLogin: () => void;
   onLogout: () => void;
+  onOpenDashboard?: () => void;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -47,6 +49,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onOpenProfileModal,
   onLogin,
   onLogout,
+  onOpenDashboard,
 }) => {
   const [activeTab, setActiveTab] = useState<'create' | 'plans' | 'achievements' | 'feedback' | 'profile'>('create');
   const [isProfileSheetOpen, setIsProfileSheetOpen] = useState(false);
@@ -180,6 +183,25 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   {isDark ? 'Oscuro' : 'Claro'}
                 </span>
               </button>
+
+              {/* Performance Dashboard Button */}
+              {onOpenDashboard && (
+                <button
+                  onClick={() => {
+                    onOpenDashboard();
+                    setIsProfileSheetOpen(false);
+                  }}
+                  className="w-full p-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/80 flex items-center justify-between text-xs font-semibold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 cursor-pointer animate-pulse"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <BarChart2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Rendimiento Académico</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">
+                    Ver
+                  </span>
+                </button>
+              )}
 
               {/* Admin Logo Button */}
               {onOpenAdmin && (

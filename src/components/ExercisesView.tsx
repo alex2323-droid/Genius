@@ -42,13 +42,29 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
   onSaveQuizResult,
   onNavigateTab,
 }) => {
-  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    if (plan && Array.isArray(plan.exercises)) {
+      plan.exercises.forEach(ex => {
+        if (ex.userAnswer) {
+          initial[ex.id] = ex.userAnswer;
+        }
+      });
+    }
+    return initial;
+  });
   const [openAnswers, setOpenAnswers] = useState<Record<string, string>>({});
   const [openEvaluations, setOpenEvaluations] = useState<Record<string, any>>({});
   const [evaluatingId, setEvaluatingId] = useState<string | null>(null);
   const [showHints, setShowHints] = useState<Record<string, boolean>>({});
   const [isExamMode, setIsExamMode] = useState<boolean>(false);
-  const [submitted, setSubmitted] = useState<boolean>(false);
+  const [submitted, setSubmitted] = useState<boolean>(() => {
+    // If we already have answered exercises, let's mark it as submitted to show feedback
+    if (plan && Array.isArray(plan.exercises)) {
+      return plan.exercises.some(ex => ex.userAnswer !== undefined);
+    }
+    return false;
+  });
   const [isGeneratingMore, setIsGeneratingMore] = useState<boolean>(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [difficultyFilter, setDifficultyFilter] = useState<'all' | 'basic' | 'intermediate' | 'advanced' | 'mastery'>('all');
@@ -143,7 +159,34 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
 
   const handleSelectOption = (exerciseId: string, option: string) => {
     if (submitted && isExamMode) return;
-    setSelectedAnswers(prev => ({ ...prev, [exerciseId]: option }));
+    
+    setSelectedAnswers(prev => {
+      const nextAnswers = { ...prev, [exerciseId]: option };
+      
+      // Update plan exercises reactively in non-exam mode immediately
+      if (!isExamMode && onUpdatePlan) {
+        const updatedExercises = plan.exercises.map(ex => {
+          if (ex.id === exerciseId) {
+            const activeCorrect = shuffledExercisesMap[ex.id]?.correctAnswer || ex.correctAnswer;
+            return {
+              ...ex,
+              userAnswer: option,
+              isCorrect: option === activeCorrect,
+            };
+          }
+          return ex;
+        });
+        setTimeout(() => {
+          onUpdatePlan({
+            ...plan,
+            exercises: updatedExercises,
+            updatedAt: new Date().toISOString()
+          });
+        }, 30);
+      }
+      
+      return nextAnswers;
+    });
   };
 
   const handleToggleHint = (exerciseId: string) => {
@@ -272,6 +315,33 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
     if (mcqPercentage >= plan.targetGrade) {
       confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 } });
     }
+
+    // Save all answers in the plan's exercises list so it gets persisted
+    if (onUpdatePlan) {
+      const updatedExercises = plan.exercises.map(ex => {
+        // If it's part of dayExercises, update it. If not, keep original.
+        const dayExIds = dayExercises.map(de => de.id);
+        if (dayExIds.includes(ex.id)) {
+          const selectedOpt = selectedAnswers[ex.id];
+          if (selectedOpt !== undefined) {
+            const activeCorrect = shuffledExercisesMap[ex.id]?.correctAnswer || ex.correctAnswer;
+            return {
+              ...ex,
+              userAnswer: selectedOpt,
+              isCorrect: selectedOpt === activeCorrect,
+            };
+          }
+        }
+        return ex;
+      });
+
+      onUpdatePlan({
+        ...plan,
+        exercises: updatedExercises,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
     if (onSaveQuizResult) {
       onSaveQuizResult({
         score: correctCount,
@@ -287,6 +357,24 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
     setOpenEvaluations({});
     setShowHints({});
     setSubmitted(false);
+
+    // Clear answers from the plan
+    if (onUpdatePlan) {
+      const updatedExercises = plan.exercises.map(ex => {
+        const dayExIds = dayExercises.map(de => de.id);
+        if (dayExIds.includes(ex.id)) {
+          const { userAnswer, isCorrect, ...rest } = ex;
+          return rest as Exercise;
+        }
+        return ex;
+      });
+
+      onUpdatePlan({
+        ...plan,
+        exercises: updatedExercises,
+        updatedAt: new Date().toISOString()
+      });
+    }
   };
 
   return (

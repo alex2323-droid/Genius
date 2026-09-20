@@ -11,7 +11,8 @@ import {
   ShieldCheck, 
   Plus, 
   MessageSquarePlus, 
-  Palette 
+  Palette,
+  BarChart2
 } from 'lucide-react';
 import { signInWithGoogle, logoutUser } from '../firebase.ts';
 import { useTheme } from '../context/ThemeContext.tsx';
@@ -30,6 +31,7 @@ interface NavbarProps {
   onOpenAdmin?: () => void;
   onOpenFeedback?: () => void;
   onOpenProfileModal?: () => void;
+  onOpenDashboard?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -42,6 +44,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAdmin,
   onOpenFeedback,
   onOpenProfileModal,
+  onOpenDashboard,
 }) => {
   const [loading, setLoading] = useState(false);
   const { toggleTheme, isDark } = useTheme();
@@ -158,6 +161,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <MessageSquarePlus className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <span>Sugerencias</span>
+            </button>
+          )}
+
+          {onOpenDashboard && (
+            <button
+              type="button"
+              id="btn-performance-nav"
+              onClick={onOpenDashboard}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200/80 dark:border-emerald-800/60 rounded-lg transition-colors cursor-pointer"
+              title="Ver estadísticas de rendimiento y progreso"
+            >
+              <BarChart2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>Rendimiento</span>
             </button>
           )}
 

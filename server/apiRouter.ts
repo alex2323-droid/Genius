@@ -7,6 +7,7 @@ import {
   gradeOpenAnswerWithAI,
   getProvidersStatus 
 } from './gemini.ts';
+import { generalLimiter, expensiveAiLimiter } from './rateLimiter.ts';
 
 export const apiRouter = Router();
 
@@ -25,7 +26,7 @@ function formatFriendlyErrorMessage(error: any): string {
 }
 
 // Check configured AI providers status
-apiRouter.get('/providers-status', (_req: Request, res: Response) => {
+apiRouter.get('/providers-status', generalLimiter, (_req: Request, res: Response) => {
   try {
     const providers = getProvidersStatus();
     return res.json({ success: true, providers });
@@ -44,7 +45,8 @@ const handleGeneratePlanRequest = async (req: Request, res: Response) => {
       dailyAvailableHours,
       files, 
       customNotes,
-      preferredProvider 
+      preferredProvider,
+      customStyleInstructions
     } = req.body;
 
     let processedFiles = Array.isArray(files) ? files : [];
@@ -80,6 +82,7 @@ const handleGeneratePlanRequest = async (req: Request, res: Response) => {
       files: processedFiles,
       customNotes: customNotes || '',
       preferredProvider,
+      customStyleInstructions,
     });
 
     return res.json({ 
@@ -98,10 +101,10 @@ const handleGeneratePlanRequest = async (req: Request, res: Response) => {
   }
 };
 
-apiRouter.post('/generate-plan', handleGeneratePlanRequest);
-apiRouter.post('/generate-study-plan', handleGeneratePlanRequest);
+apiRouter.post('/generate-plan', expensiveAiLimiter, handleGeneratePlanRequest);
+apiRouter.post('/generate-study-plan', expensiveAiLimiter, handleGeneratePlanRequest);
 
-apiRouter.post('/generate-day-practice', async (req: Request, res: Response) => {
+apiRouter.post('/generate-day-practice', expensiveAiLimiter, async (req: Request, res: Response) => {
   try {
     const { 
       subject, 
@@ -141,7 +144,7 @@ apiRouter.post('/generate-day-practice', async (req: Request, res: Response) => 
   }
 });
 
-apiRouter.post('/explain-topic', async (req: Request, res: Response) => {
+apiRouter.post('/explain-topic', expensiveAiLimiter, async (req: Request, res: Response) => {
   try {
     const { topic, context, preferredProvider } = req.body;
     if (!topic) {
@@ -160,7 +163,7 @@ apiRouter.post('/explain-topic', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.post('/grade-answer', async (req: Request, res: Response) => {
+apiRouter.post('/grade-answer', expensiveAiLimiter, async (req: Request, res: Response) => {
   try {
     const { question, studentAnswer, expectedAnswer, targetGrade, preferredProvider } = req.body;
     if (!question || !studentAnswer) {
@@ -185,7 +188,7 @@ apiRouter.post('/grade-answer', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.post('/generate-traps', async (req: Request, res: Response) => {
+apiRouter.post('/generate-traps', expensiveAiLimiter, async (req: Request, res: Response) => {
   try {
     const { subject, dayNumber, dayTitle, context, preferredProvider } = req.body;
     const result = await generateTrapsWithAI({

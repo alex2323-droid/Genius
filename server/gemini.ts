@@ -23,10 +23,11 @@ export interface PlanGenerationRequest {
   }>;
   customNotes?: string;
   preferredProvider?: string;
+  customStyleInstructions?: string;
 }
 
 export async function generateStudyPlanWithAI(req: PlanGenerationRequest) {
-  const { subject, daysLeft, targetGrade, studyHoursPerDay, files, customNotes, preferredProvider } = req;
+  const { subject, daysLeft, targetGrade, studyHoursPerDay, files, customNotes, preferredProvider, customStyleInstructions } = req;
   const numDays = Math.min(Math.max(Number(daysLeft) || 3, 1), 30);
   const dailyHours = Number(studyHoursPerDay) || 2;
   const gradeTarget = Number(targetGrade) || 85;
@@ -43,6 +44,7 @@ Un estudiante necesita prepararse para su evaluación/parcial con las siguientes
 - Porcentaje de nota que desea sacar: ${gradeTarget}%
 - Horas de estudio dedicadas por día: ${dailyHours} horas diarias
 ${customNotes ? `- Notas o indicaciones adicionales del estudiante: "${customNotes}"` : ''}
+${customStyleInstructions ? `- INSTRUCCIONES ESTRICTAS DE ESTILO DE CONTENIDO Y EVITACIÓN DE TEXTO GENÉRICO:\n"${customStyleInstructions}"\n` : ''}
 
 ¡PRINCIPIO CARDINAL DE ESCALADO MULTIVARIABLE!:
 "LA EXTENSIÓN DE LA GUÍA, LA CANTIDAD DE CONCEPTOS, EL BANCO DE TARJETAS (6-10 POR DÍA), EL VOLUMEN DE EJERCICIOS (6-10 POR DÍA) Y LAS TRAMPAS DE EXAMEN SE CALIBRAN DINÁMICAMENTE CON LA NOTA META (${gradeTarget}%), LAS HORAS DIARIAS (${dailyHours}h), LOS DÍAS (${numDays}d) Y LOS ARCHIVOS SUBIDOS".
@@ -191,11 +193,12 @@ DEBES GENERAR UNA RESPUESTA ESTRICTAMENTE EN FORMATO JSON VÁLIDO con la siguien
   ]
 }
 
-DIRECTRICES OBLIGATORIAS DE ANÁLISIS DOCUMENTAL Y NO-REPETICIÓN:
-1. ¡PROHIBIDO TOTALMENTE REPETIR TEXTOS O USAR PLANTILLAS EN SERIE! Cada concepto debe ser un postulado o subtema real extraído de los archivos subidos.
-2. Cada 'explanation' en 'coreConcepts' DEBE tener OBLIGATORIAMENTE los 3 bloques (Fundamentos, Mecanismo y Contexto, Justificación Teórica).
-3. Cada día DEBE incluir de 6 a 10 tarjetas de memoria activa ("flashcards") con su "dayNumber" correspondiente.
-4. Responde ÚNICAMENTE con el objeto JSON parseable sin texto adicional.
+DIRECTRICES OBLIGATORIAS DE ANÁLISIS DOCUMENTAL Y NO-REPETICIÓN ABSOLUTA:
+1. ¡ESTRICTAMENTE PROHIBIDO REPETIR CONCEPTOS, DEFINICIONES, FÓRMULAS, PREGUNTAS, TRAMPAS O FLASHCARDS EN DIFERENTES DÍAS! Cada día de estudio (Día 1, Día 2, etc.) debe abordar conceptos y ejercicios COMPLETAMENTE DISTINTOS y complementarios de la materia.
+2. Cada concepto en 'coreConcepts' debe tener un título único y descriptivo, y una explicación 100% exclusiva que describa un aspecto específico diferente de los materiales. No copies ni pegues los mismos párrafos o definiciones en diferentes temas.
+3. Cada 'explanation' en 'coreConcepts' DEBE tener OBLIGATORIAMENTE los 3 bloques (Fundamentos, Mecanismo y Contexto, Justificación Teórica).
+4. Cada día DEBE incluir de 6 a 10 tarjetas de memoria activa ("flashcards") con su "dayNumber" correspondiente, cada una preguntando sobre un detalle diferente.
+5. Responde ÚNICAMENTE con el objeto JSON parseable sin texto adicional.
 `;
 
   // Pre-analyze documents for semantic ground truth

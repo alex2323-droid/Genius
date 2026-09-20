@@ -484,6 +484,57 @@ function cleanSentence(s: string): string {
   return trimmed.endsWith('.') ? trimmed : trimmed + '.';
 }
 
+export const PERSPECTIVES = [
+  {
+    suffix: "Fundamentos y Definición Central",
+    whatIs: (p: string, t: string) => `Definición central de ${t}: ${p}`,
+    howWorks: (m: string, t: string) => `Mecanismo de acción inicial: ${m}`,
+    whyMatters: (j: string, t: string) => `Criterio básico de examen: ${j}`
+  },
+  {
+    suffix: "Análisis Dinámico y Funcional",
+    whatIs: (p: string, t: string) => `Análisis dinámico de ${t}. Se examina cómo cambian sus componentes en función del tiempo o de variables de control.`,
+    howWorks: (m: string, t: string) => `Secuencia operativa detallada: ${m}`,
+    whyMatters: (j: string, t: string) => `El profesor evalúa la secuencia temporal y la relación causa-efecto del mecanismo de ${t}.`
+  },
+  {
+    suffix: "Casos Prácticos y Nivel de Examen",
+    whatIs: (p: string, t: string) => `Aplicación práctica y resolución de problemas sobre ${t}.`,
+    howWorks: (m: string, t: string) => `Procedimiento paso a paso para resolver un caso real del material: ${m}`,
+    whyMatters: (j: string, t: string) => `Pregunta típica de desarrollo: Se exige aplicar la teoría de ${t} a un problema práctico concreto.`
+  },
+  {
+    suffix: "Trampas y Errores Conceptuales",
+    whatIs: (p: string, t: string) => `Identificación de fallos y concepciones erróneas en ${t}.`,
+    howWorks: (m: string, t: string) => `Para evitar errores, se debe validar cada hipótesis antes de asumir ${m.slice(0, 80)}...`,
+    whyMatters: (j: string, t: string) => `Es una de las trampas más habituales del parcial; el docente penaliza aplicar el modelo de ${t} a ciegas.`
+  },
+  {
+    suffix: "Interacción Sistémica y Entorno",
+    whatIs: (p: string, t: string) => `Relación de ${t} con los demás conceptos de la asignatura.`,
+    howWorks: (m: string, t: string) => `Integración sistémica: ${t} se conecta funcionalmente con el resto del temario a través de ${m.slice(0, 100)}...`,
+    whyMatters: (j: string, t: string) => `Pregunta de integración: El examen suele incluir reactivos de opción múltiple que conectan este tema con conceptos paralelos.`
+  },
+  {
+    suffix: "Condiciones de Contorno y Límites",
+    whatIs: (p: string, t: string) => `Restricciones y límites de aplicabilidad de ${t}.`,
+    howWorks: (m: string, t: string) => `Validación de supuestos de contorno: Se asumen parámetros específicos en el mecanismo de ${m.slice(0, 80)}...`,
+    whyMatters: (j: string, t: string) => `Para nota máxima, debes especificar cuándo NO es aplicable el modelo de ${t}.`
+  },
+  {
+    suffix: "Criterio de Corrección y Rúbrica",
+    whatIs: (p: string, t: string) => `Análisis formal y terminología obligatoria para responder sobre ${t}.`,
+    howWorks: (m: string, t: string) => `Estructura formal de la respuesta: Explicar el fundamento, detallar el recorrido y concluir justificando ${m.slice(0, 80)}...`,
+    whyMatters: (j: string, t: string) => `Rúbrica oficial: Se exigen estos 3 pasos para otorgar el puntaje completo de la pregunta de examen.`
+  },
+  {
+    suffix: "Estudio de Caso y Simulación",
+    whatIs: (p: string, t: string) => `Estudio de caso clínico, de ingeniería o analítico sobre ${t}.`,
+    howWorks: (m: string, t: string) => `Análisis del comportamiento del sistema frente a un estímulo o perturbación en ${m.slice(0, 80)}...`,
+    whyMatters: (j: string, t: string) => `Evaluación de competencias: Se evalúa tu capacidad para predecir el comportamiento de ${t} ante cambios de variables.`
+  }
+];
+
 /**
  * Domain-specific subtopics generator for fallback when no documents are uploaded,
  * strictly derived from the subject name itself without generic irrelevant templates.
@@ -684,19 +735,25 @@ export function generateDistinctCoreConcepts(
       const candidateIdx = (dayOffset + i) % poolSize;
       const candidate = candidatePool[candidateIdx];
       
-      // If title was already used in this day, add a specific perspective tag
-      if (usedTitles.has(candidate.title)) {
-        const perspectives = ['Mecanismo y Regulación', 'Fisiología y Dinámica', 'Evaluación y Casos', 'Estructura y Función'];
-        title = `${candidate.title} [${perspectives[i % perspectives.length]}]`;
+      // Calculate how many times we've wrapped around the pool to choose a perspective
+      const wrapAroundCount = Math.floor((dayOffset + i) / poolSize);
+      
+      if (wrapAroundCount > 0) {
+        const perspective = PERSPECTIVES[wrapAroundCount % PERSPECTIVES.length];
+        title = `${candidate.title} [${perspective.suffix}]`;
+        premise = perspective.whatIs(candidate.premise, candidate.title);
+        mechanismText = perspective.howWorks(candidate.mechanismText, candidate.title);
+        justificationText = perspective.whyMatters(candidate.justificationText, candidate.title);
+        formulaOrExample = candidate.formulaOrExample;
+        sourceCitation = candidate.citation;
       } else {
         title = candidate.title;
+        premise = candidate.premise;
+        mechanismText = candidate.mechanismText;
+        justificationText = candidate.justificationText;
+        formulaOrExample = candidate.formulaOrExample;
+        sourceCitation = candidate.citation;
       }
-      
-      premise = candidate.premise;
-      mechanismText = candidate.mechanismText;
-      justificationText = candidate.justificationText;
-      formulaOrExample = candidate.formulaOrExample;
-      sourceCitation = candidate.citation;
     } else {
       const theme = getModularPillarForDay(mainSubject, dayNumber, i);
       title = theme.title;
@@ -1097,7 +1154,7 @@ export function ensureFullPlanCoverage(
       fullConcepts.push(...dayConcepts, ...generated.slice(dayConcepts.length));
     }
   }
-  plan.studyGuide.coreConcepts = fullConcepts;
+  plan.studyGuide.coreConcepts = enrichAndNormalizeCoreConcepts(fullConcepts, docData, subject, grade);
 
   // 2. Ensure Flashcards (6 to 10 per day for EVERY day)
   const currentCards = Array.isArray(plan.studyGuide.flashcards) ? plan.studyGuide.flashcards : [];
@@ -1182,30 +1239,54 @@ export function enrichAndNormalizeCoreConcepts(
     return generateDistinctCoreConcepts(data, 6, mainSubject, targetGrade, 1);
   }
 
+  const seenTitles = new Set<string>();
+  const seenExplanations = new Set<string>();
+
   return concepts.map((c, idx) => {
-    const rawTitle = typeof c.title === 'string' && c.title.trim() ? c.title : `Concepto ${idx + 1}`;
-    const title = cleanTitle(rawTitle);
+    let rawTitle = typeof c.title === 'string' && c.title.trim() ? c.title : `Concepto ${idx + 1}`;
+    let title = cleanTitle(rawTitle);
     const dayNumber = typeof c.dayNumber === 'number' ? c.dayNumber : 1;
     const importance = c.importance === 'critical' || c.importance === 'high' || c.importance === 'medium' ? c.importance : (idx === 0 ? 'critical' : 'high');
 
     let explanation = typeof c.explanation === 'string' ? c.explanation.trim() : '';
 
-    // If explanation is empty or too short, synthesize a clear, easy-to-understand explanation from document data
-    if (!explanation || explanation.length < 25) {
-      const fallbackDef = data.definitions[idx % Math.max(1, data.definitions.length)] || 
+    // Normalize for similarity checking
+    const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const isDuplicateTitle = seenTitles.has(normalizedTitle);
+    
+    const normalizedExpl = explanation.toLowerCase().slice(0, 100).replace(/[^a-z0-9]/g, '');
+    const isDuplicateExpl = normalizedExpl ? seenExplanations.has(normalizedExpl) : false;
+
+    if (isDuplicateTitle || isDuplicateExpl || !explanation || explanation.length < 25) {
+      // It's a duplicate or too short! Let's diversify it with an alternate perspective!
+      const poolIdx = idx;
+      const fallbackDef = data.definitions[poolIdx % Math.max(1, data.definitions.length)] || 
         `Concepto clave de ${title} extraído de tus apuntes de ${mainSubject}.`;
       
-      const fallbackMech = data.mechanisms[idx % Math.max(1, data.mechanisms.length)] || 
+      const fallbackMech = data.mechanisms[poolIdx % Math.max(1, data.mechanisms.length)] || 
         `Explica paso a paso cómo se aplica ${title} y cómo se relacionan sus partes según el material.`;
       
-      const fallbackJust = data.justifications[idx % Math.max(1, data.justifications.length)] || 
+      const fallbackJust = data.justifications[poolIdx % Math.max(1, data.justifications.length)] || 
         `Punto clave para el examen: Esencial para resolver preguntas teóricas y prácticas alcanzando la meta del ${targetGrade}%.`;
 
+      // Select a perspective to diversify this duplicate
+      const perspectiveIdx = isDuplicateTitle ? (seenTitles.size % PERSPECTIVES.length) : (idx % PERSPECTIVES.length);
+      const perspective = PERSPECTIVES[perspectiveIdx];
+      
+      if (isDuplicateTitle) {
+        title = `${title} [${perspective.suffix}]`;
+      }
+
       explanation = [
-        `• ¿Qué es y de qué trata?: ${cleanSentence(fallbackDef)}`,
-        `• ¿Cómo funciona / Paso a paso?: ${cleanSentence(fallbackMech)}`,
-        `• ¿Por qué importa en el examen?: ${cleanSentence(fallbackJust)}`
+        `• ¿Qué es y de qué trata?: ${cleanSentence(perspective.whatIs(fallbackDef, title))}`,
+        `• ¿Cómo funciona / Paso a paso?: ${cleanSentence(perspective.howWorks(fallbackMech, title))}`,
+        `• ¿Por qué importa en el examen?: ${cleanSentence(perspective.whyMatters(fallbackJust, title))}`
       ].join('\n');
+    }
+
+    seenTitles.add(title.toLowerCase().replace(/[^a-z0-9]/g, ''));
+    if (explanation) {
+      seenExplanations.add(explanation.toLowerCase().slice(0, 100).replace(/[^a-z0-9]/g, ''));
     }
 
     let exampleOrFormula = typeof c.exampleOrFormula === 'string' && c.exampleOrFormula.trim() ? c.exampleOrFormula : '';

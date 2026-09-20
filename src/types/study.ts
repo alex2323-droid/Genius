@@ -15,6 +15,7 @@ export interface DailyScheduleDay {
   title: string;
   focus: string;
   estimatedHours: number;
+  actualHours?: number;
   objectives: string[];
   keyTopics: string[];
   tasks: DailyTask[];
@@ -83,6 +84,8 @@ export interface Exercise {
   dayNumber?: number;
   cognitiveLevel?: 'analysis' | 'evaluation' | 'application';
   caseContext?: string;
+  userAnswer?: string;
+  isCorrect?: boolean;
 }
 
 export interface Achievement {

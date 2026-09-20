@@ -18,7 +18,8 @@ import {
   ArrowRight,
   ExternalLink,
   BarChart2,
-  BookOpen
+  BookOpen,
+  Sliders
 } from 'lucide-react';
 import { 
   parseUploadedFile, 
@@ -42,9 +43,50 @@ interface PlanConfiguratorProps {
     files: ParsedFile[];
     customNotes: string;
     preferredProvider?: string;
+    customStyleInstructions?: string;
   }) => Promise<void>;
   isGenerating: boolean;
 }
+
+interface StylePreset {
+  id: string;
+  label: string;
+  description: string;
+  promptGuideline: string;
+}
+
+const STYLE_PRESETS: StylePreset[] = [
+  {
+    id: 'absolute-fidelity',
+    label: 'Fidelidad Absoluta al Texto',
+    description: 'Se ciñe estrictamente a tus diapositivas y apuntes, evitando definiciones externas genéricas o inventadas.',
+    promptGuideline: 'FIDELIDAD ABSOLUTA AL TEXTO: Limítate estrictamente al contenido conceptual, nombres, datos, clasificaciones y términos tal como están expresados en los apuntes del estudiante. No uses explicaciones o definiciones genéricas de internet que no guarden relación directa con sus documentos.',
+  },
+  {
+    id: 'no-boilerplate',
+    label: 'Sin Relleno ni Redundancias',
+    description: 'Evita introducciones repetitivas como "En el ámbito de...", "Es importante destacar que...". Va directo al grano.',
+    promptGuideline: 'CONCISIÓN Y COBERTURA DIRECTA: Elimina introducciones redundantes, frases de relleno corporativo o de transición como "En este tema analizaremos...", "Es fundamental comprender...". Entra directamente a la explicación teórica o resolución técnica del concepto.',
+  },
+  {
+    id: 'high-rigor',
+    label: 'Rigor Técnico de Alto Nivel',
+    description: 'Usa terminología científica exacta, fórmulas matemáticas formales y nomenclatura del examen.',
+    promptGuideline: 'RIGOR TÉCNICO UNIVERSITARIO: Emplea la nomenclatura exacta, variables matemáticas, fórmulas desglosadas y terminología científica de nivel universitario/académico que corresponda. Evita simplificaciones excesivas o metáforas infantiles.',
+  },
+  {
+    id: 'real-cases',
+    label: 'Casos y Ejemplos de Examen Real',
+    description: 'Sustituye analogías simples por problemas, casos clínicos o de diseño reales de tus documentos.',
+    promptGuideline: 'CASOS Y EJEMPLOS REALES: Evita analogías genéricas de la vida cotidiana (ej: coches, frutas). En su lugar, usa casos de estudio prácticos, problemas cuantitativos, síntomas clínicos o de ingeniería documentados en el material del estudiante.',
+  },
+  {
+    id: 'dynamic-non-repetitive',
+    label: 'Estructuras Dinámicas No-Repetitivas',
+    description: 'Fuerza a variar el fraseo y el formato en cada tema para evitar estructuras idénticas.',
+    promptGuideline: 'ESTRUCTURACIÓN DINÁMICA: No utilices la misma plantilla de redacción o el mismo patrón de inicio para todos los conceptos o ejercicios. Varía la estructura sintáctica, el tipo de pregunta y el enfoque explicativo para cada día.',
+  }
+];
 
 const SAMPLE_SUBJECT = 'Fisiología y Biología Celular: Transporte de Membrana y Potenciales de Acción';
 const SAMPLE_NOTES = 'El profesor indicó que el 40% del examen evaluará la bomba Na+/K+ ATPasa, canales de voltaje y la ecuación de Nernst-Goldman.';
@@ -58,6 +100,8 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
   const [targetGrade, setTargetGrade] = useState<number>(85);
   const [studyHoursPerDay, setStudyHoursPerDay] = useState<number>(2);
   const [customNotes, setCustomNotes] = useState('');
+  const [selectedStylePresets, setSelectedStylePresets] = useState<string[]>(['no-boilerplate', 'absolute-fidelity']);
+  const [customStyleText, setCustomStyleText] = useState<string>('');
   const [selectedProvider, setSelectedProvider] = useState<string>('gemini');
   const [files, setFiles] = useState<ParsedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -203,6 +247,18 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
     setFiles([sampleParsed]);
   };
 
+  const getCombinedStyleInstructions = (): string => {
+    const activeGuidelines = STYLE_PRESETS
+      .filter(preset => selectedStylePresets.includes(preset.id))
+      .map(preset => preset.promptGuideline);
+    
+    const parts = [...activeGuidelines];
+    if (customStyleText.trim()) {
+      parts.push(`INSTRUCCIONES ADICIONALES DEL ESTUDIANTE: ${customStyleText.trim()}`);
+    }
+    return parts.join('\n\n');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (files.length === 0) {
@@ -217,6 +273,7 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
       files,
       customNotes,
       preferredProvider: selectedProvider,
+      customStyleInstructions: getCombinedStyleInstructions(),
     });
   };
 
@@ -643,6 +700,82 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
                 value={customNotes}
                 onChange={(e) => setCustomNotes(e.target.value)}
                 placeholder="Ej: Puso mucho énfasis en el capítulo 4; no entran demostraciones teóricas largas; el examen será mitad tipo test y mitad problemas..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-base sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Step 3: Content Style Configuration */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 shadow-sm transition-colors">
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-sm shrink-0">
+              3
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-blue-600 dark:text-blue-400" /> Configuración de Estilo de Contenido
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Personaliza la redacción para evitar explicaciones genéricas o repetitivas</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {/* Presets Grid */}
+            <div>
+              <span className="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 mb-2">
+                Ajustes de Calidad y Enfoque (Selecciona los que desees aplicar)
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {STYLE_PRESETS.map((preset) => {
+                  const isSelected = selectedStylePresets.includes(preset.id);
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedStylePresets(prev =>
+                          prev.includes(preset.id)
+                            ? prev.filter(id => id !== preset.id)
+                            : [...prev, preset.id]
+                        );
+                      }}
+                      className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-50/70 dark:bg-blue-950/30 border-blue-400 dark:border-blue-800 shadow-2xs'
+                          : 'bg-slate-50/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}} // handled by button click
+                        className="mt-1 h-4 w-4 rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer animate-none"
+                      />
+                      <div>
+                        <p className={`text-xs sm:text-sm font-bold ${isSelected ? 'text-blue-800 dark:text-blue-300' : 'text-slate-800 dark:text-slate-200'}`}>
+                          {preset.label}
+                        </p>
+                        <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-normal">
+                          {preset.description}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Custom Style Text Area */}
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
+                Instrucciones de Estilo Personalizadas (Opcional)
+              </label>
+              <textarea
+                rows={2}
+                value={customStyleText}
+                onChange={(e) => setCustomStyleText(e.target.value)}
+                placeholder="Ej: 'No uses metáforas de frutas para explicar código', 'Varía las opciones de respuesta del test', 'Escribe de manera súper concisa en viñetas'..."
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-base sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
               />
             </div>

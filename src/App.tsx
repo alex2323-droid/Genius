@@ -54,6 +54,7 @@ import { FeedbackModal } from './components/FeedbackModal.tsx';
 import { ProfileModal } from './components/ProfileModal.tsx';
 import { AICompetitionModal } from './components/AICompetitionModal.tsx';
 import { BottomNav } from './components/BottomNav.tsx';
+import { PerformanceDashboard } from './components/PerformanceDashboard.tsx';
 import { useCustomLogo } from './utils/logoStorage.ts';
 import { checkNewAchievements, getPlanAchievements } from './utils/achievementManager.ts';
 import { generateClientFallbackPlan } from './utils/clientPlanGenerator.ts';
@@ -239,6 +240,9 @@ export default function App() {
   // Profile & Avatar Modal State
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
+  // Performance Dashboard State
+  const [isDashboardOpen, setIsDashboardOpen] = useState<boolean>(false);
+
   const currentLogo = useCustomLogo();
 
   const handleUpdatePlan = (updatedPlan: StudyPlan) => {
@@ -374,6 +378,7 @@ export default function App() {
     studyHoursPerDay: number;
     customNotes?: string;
     preferredProvider?: string;
+    customStyleInstructions?: string;
   }) => {
     setIsGenerating(true);
     setErrorMessage(null);
@@ -406,6 +411,7 @@ export default function App() {
             dailyAvailableHours: config.studyHoursPerDay,
             customNotes: config.customNotes,
             preferredProvider: config.preferredProvider,
+            customStyleInstructions: config.customStyleInstructions,
           }),
         });
 
@@ -518,12 +524,14 @@ export default function App() {
           setIsCreating(true);
           setActivePlan(null);
           setSelectedStudyDay('all');
+          setIsDashboardOpen(false);
         }}
         onOpenAchievements={() => setIsAchievementsModalOpen(true)}
         unlockedAchievementsCount={activePlan ? getPlanAchievements(activePlan).filter(a => a.unlockedAt || a.progressPercent >= 100).length : 0}
         onOpenAdmin={() => setIsAdminModalOpen(true)}
         onOpenFeedback={() => setIsFeedbackModalOpen(true)}
         onOpenProfileModal={() => setIsProfileModalOpen(true)}
+        onOpenDashboard={activePlan ? () => setIsDashboardOpen(true) : undefined}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
@@ -543,7 +551,13 @@ export default function App() {
           </div>
         )}
 
-        {isCreating || !activePlan ? (
+        {isDashboardOpen && activePlan ? (
+          <PerformanceDashboard
+            plan={activePlan}
+            onUpdatePlan={handleUpdatePlan}
+            onClose={() => setIsDashboardOpen(false)}
+          />
+        ) : isCreating || !activePlan ? (
           <PlanConfigurator
             onGeneratePlan={handleGeneratePlan}
             isGenerating={isGenerating}
@@ -853,6 +867,7 @@ export default function App() {
           setIsCreating(true);
           setActivePlan(null);
           setSelectedStudyDay('all');
+          setIsDashboardOpen(false);
         }}
         onOpenSavedPlans={() => setIsDrawerOpen(true)}
         onOpenAchievements={() => setIsAchievementsModalOpen(true)}
@@ -861,6 +876,7 @@ export default function App() {
         onOpenProfileModal={() => setIsProfileModalOpen(true)}
         onLogin={signInWithGoogle}
         onLogout={logoutUser}
+        onOpenDashboard={activePlan ? () => setIsDashboardOpen(true) : undefined}
       />
 
       {/* Genius Brand Footer */}
@@ -899,6 +915,7 @@ export default function App() {
           setActivePlan(plan);
           setIsCreating(false);
           setSelectedStudyDay('all');
+          setIsDashboardOpen(false);
         }}
         onDeletePlan={handleDeletePlan}
       />
