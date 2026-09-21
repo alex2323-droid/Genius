@@ -50,15 +50,62 @@ export const AdminLogoModal: React.FC<AdminLogoModalProps> = ({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (result) {
-        setPreviewUrl(result);
-        setErrorMsg(null);
-      }
-    };
-    reader.readAsDataURL(file);
+    // Client-side image compression and resizing (limits max dimension to 600px for optimal logo presentation and Firestore size safety)
+    if (file.type === 'image/svg+xml') {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        if (result) {
+          setPreviewUrl(result);
+          setErrorMsg(null);
+        }
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const rawDataUrl = event.target?.result as string;
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxDimension = 600;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const isPng = file.type === 'image/png';
+            const outputFormat = isPng ? 'image/png' : 'image/jpeg';
+            const outputQuality = isPng ? undefined : 0.85;
+            const compressedDataUrl = canvas.toDataURL(outputFormat, outputQuality);
+            setPreviewUrl(compressedDataUrl);
+            setErrorMsg(null);
+          } else {
+            setPreviewUrl(rawDataUrl);
+            setErrorMsg(null);
+          }
+        };
+        img.onerror = () => {
+          setPreviewUrl(rawDataUrl);
+          setErrorMsg(null);
+        };
+        img.src = rawDataUrl;
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSave = async () => {

@@ -78,6 +78,34 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
   const [trapFilterStatus, setTrapFilterStatus] = useState<'all' | 'pending' | 'mastered'>('all');
   const [masteredTrapIndices, setMasteredTrapIndices] = useState<number[]>([]);
   
+  // Custom Study Guide Editing States
+  const [isEditModeEnabled, setIsEditModeEnabled] = useState(false);
+  
+  // Executive summary editing
+  const [isEditingSummary, setIsEditingSummary] = useState(false);
+  const [summaryDraft, setSummaryDraft] = useState('');
+
+  // Concept editing
+  const [editingConceptIndex, setEditingConceptIndex] = useState<number | null>(null);
+  const [conceptEditTitle, setConceptEditTitle] = useState('');
+  const [conceptEditExplanation, setConceptEditExplanation] = useState('');
+  const [conceptEditImportance, setConceptEditImportance] = useState<'critical' | 'high' | 'medium'>('medium');
+  const [conceptEditExample, setConceptEditExample] = useState('');
+  const [conceptEditDay, setConceptEditDay] = useState<number>(1);
+  const [isAddingConcept, setIsAddingConcept] = useState(false);
+
+  // Formula editing
+  const [editingFormulaIndex, setEditingFormulaIndex] = useState<number | null>(null);
+  const [formulaEditTerm, setFormulaEditTerm] = useState('');
+  const [formulaEditDefinition, setFormulaEditDefinition] = useState('');
+  const [formulaEditSyntax, setFormulaEditSyntax] = useState('');
+  const [formulaEditDay, setFormulaEditDay] = useState<number>(1);
+  const [isAddingFormula, setIsAddingFormula] = useState(false);
+
+  // Regeneration state
+  const [isRegeneratingPractice, setIsRegeneratingPractice] = useState(false);
+  const [regeneratedMessage, setRegeneratedMessage] = useState<string | null>(null);
+
   // Trap creation / editing states
   const [editingTrapOriginalIndex, setEditingTrapOriginalIndex] = useState<number | null>(null);
   const [editMistake, setEditMistake] = useState('');
@@ -197,6 +225,220 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
 
     onUpdatePlan(updatedPlan);
     setEditingTrapOriginalIndex(null);
+  };
+
+  // --- Summary Editing Handlers ---
+  const handleStartSummaryEdit = () => {
+    setSummaryDraft(studyGuide.executiveSummary || '');
+    setIsEditingSummary(true);
+  };
+
+  const handleSaveSummary = () => {
+    if (!onUpdatePlan) return;
+    const updatedPlan: StudyPlan = {
+      ...plan,
+      studyGuide: {
+        ...studyGuide,
+        executiveSummary: summaryDraft.trim(),
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    onUpdatePlan(updatedPlan);
+    setIsEditingSummary(false);
+  };
+
+  // --- Concept Editing Handlers ---
+  const handleStartConceptEdit = (concept: CoreConcept, idx: number) => {
+    setEditingConceptIndex(idx);
+    setConceptEditTitle(concept.title);
+    setConceptEditExplanation(concept.explanation);
+    setConceptEditImportance(concept.importance || 'medium');
+    setConceptEditExample(concept.exampleOrFormula || '');
+    setConceptEditDay(concept.dayNumber || 1);
+  };
+
+  const handleSaveConcept = (originalIdx: number) => {
+    if (!onUpdatePlan) return;
+    const updatedConcepts = [...rawConcepts];
+    updatedConcepts[originalIdx] = {
+      ...updatedConcepts[originalIdx],
+      title: conceptEditTitle.trim(),
+      explanation: conceptEditExplanation.trim(),
+      importance: conceptEditImportance,
+      exampleOrFormula: conceptEditExample.trim() || undefined,
+      dayNumber: conceptEditDay,
+    };
+    const updatedPlan: StudyPlan = {
+      ...plan,
+      studyGuide: {
+        ...studyGuide,
+        coreConcepts: updatedConcepts,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    onUpdatePlan(updatedPlan);
+    setEditingConceptIndex(null);
+  };
+
+  const handleAddConcept = () => {
+    if (!onUpdatePlan || !conceptEditTitle.trim() || !conceptEditExplanation.trim()) return;
+    const newConcept: CoreConcept = {
+      title: conceptEditTitle.trim(),
+      explanation: conceptEditExplanation.trim(),
+      importance: conceptEditImportance,
+      exampleOrFormula: conceptEditExample.trim() || undefined,
+      dayNumber: conceptEditDay,
+    };
+    const updatedPlan: StudyPlan = {
+      ...plan,
+      studyGuide: {
+        ...studyGuide,
+        coreConcepts: [...rawConcepts, newConcept],
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    onUpdatePlan(updatedPlan);
+    setIsAddingConcept(false);
+    setConceptEditTitle('');
+    setConceptEditExplanation('');
+    setConceptEditExample('');
+  };
+
+  const handleDeleteConcept = (originalIdx: number) => {
+    if (!onUpdatePlan) return;
+    const updatedConcepts = rawConcepts.filter((_, idx) => idx !== originalIdx);
+    const updatedPlan: StudyPlan = {
+      ...plan,
+      studyGuide: {
+        ...studyGuide,
+        coreConcepts: updatedConcepts,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    onUpdatePlan(updatedPlan);
+  };
+
+  // --- Formula Editing Handlers ---
+  const handleStartFormulaEdit = (formula: DefinitionOrFormula, idx: number) => {
+    setEditingFormulaIndex(idx);
+    setFormulaEditTerm(formula.term);
+    setFormulaEditDefinition(formula.definition);
+    setFormulaEditSyntax(formula.formulaOrSyntax || '');
+    setFormulaEditDay(formula.dayNumber || 1);
+  };
+
+  const handleSaveFormula = (originalIdx: number) => {
+    if (!onUpdatePlan) return;
+    const updatedFormulas = [...rawFormulas];
+    updatedFormulas[originalIdx] = {
+      ...updatedFormulas[originalIdx],
+      term: formulaEditTerm.trim(),
+      definition: formulaEditDefinition.trim(),
+      formulaOrSyntax: formulaEditSyntax.trim() || undefined,
+      dayNumber: formulaEditDay,
+    };
+    const updatedPlan: StudyPlan = {
+      ...plan,
+      studyGuide: {
+        ...studyGuide,
+        keyDefinitionsAndFormulas: updatedFormulas,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    onUpdatePlan(updatedPlan);
+    setEditingFormulaIndex(null);
+  };
+
+  const handleAddFormula = () => {
+    if (!onUpdatePlan || !formulaEditTerm.trim() || !formulaEditDefinition.trim()) return;
+    const newFormula: DefinitionOrFormula = {
+      term: formulaEditTerm.trim(),
+      definition: formulaEditDefinition.trim(),
+      formulaOrSyntax: formulaEditSyntax.trim() || undefined,
+      dayNumber: formulaEditDay,
+    };
+    const updatedPlan: StudyPlan = {
+      ...plan,
+      studyGuide: {
+        ...studyGuide,
+        keyDefinitionsAndFormulas: [...rawFormulas, newFormula],
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    onUpdatePlan(updatedPlan);
+    setIsAddingFormula(false);
+    setFormulaEditTerm('');
+    setFormulaEditDefinition('');
+    setFormulaEditSyntax('');
+  };
+
+  const handleDeleteFormula = (originalIdx: number) => {
+    if (!onUpdatePlan) return;
+    const updatedFormulas = rawFormulas.filter((_, idx) => idx !== originalIdx);
+    const updatedPlan: StudyPlan = {
+      ...plan,
+      studyGuide: {
+        ...studyGuide,
+        keyDefinitionsAndFormulas: updatedFormulas,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    onUpdatePlan(updatedPlan);
+  };
+
+  // --- AI Practice Regeneration Handler ---
+  const handleRegeneratePractice = async () => {
+    if (!onUpdatePlan) return;
+    setIsRegeneratingPractice(true);
+    setRegeneratedMessage(null);
+    try {
+      const response = await fetch('/api/regenerate-practice', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          subject: plan.subject || plan.title,
+          studyGuide: {
+            executiveSummary: studyGuide.executiveSummary,
+            coreConcepts: rawConcepts,
+            keyDefinitionsAndFormulas: rawFormulas,
+            commonExamTraps: rawTraps,
+          },
+          targetGrade: plan.targetGrade || 85,
+          preferredProvider: plan.providerId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Error al regenerar la práctica');
+      }
+
+      const data = await response.json();
+      const generated = data.practice;
+
+      if (generated && (Array.isArray(generated.exercises) || Array.isArray(generated.flashcards))) {
+        const updatedPlan: StudyPlan = {
+          ...plan,
+          exercises: Array.isArray(generated.exercises) ? generated.exercises : plan.exercises,
+          studyGuide: {
+            ...studyGuide,
+            flashcards: Array.isArray(generated.flashcards) ? generated.flashcards : studyGuide.flashcards,
+          },
+          updatedAt: new Date().toISOString(),
+        };
+        onUpdatePlan(updatedPlan);
+        setRegeneratedMessage('¡Excelente! He regenerado tu práctica de estudio con éxito. Ahora tienes 4 preguntas tipo test de opción múltiple, 4 de Verdadero o Falso y 6 tarjetas de memoria (flashcards) personalizadas que reflejan fielmente tu guía de estudio editada.');
+      } else {
+        throw new Error('La respuesta del servidor no tiene el formato esperado.');
+      }
+    } catch (err: any) {
+      console.error('Error in handleRegeneratePractice:', err);
+      setRegeneratedMessage(`Error de regeneración: ${err.message || 'No se pudo conectar con el servidor de IA.'}`);
+    } finally {
+      setIsRegeneratingPractice(false);
+    }
   };
 
   // Start editing a trap
@@ -555,26 +797,153 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
           </div>
         </div>
 
-        {/* Executive summary (shown if on 'all' or day 1) */}
-        {(selectedDayNumber === 'all' || selectedDayNumber === 1) && studyGuide.executiveSummary && (
-          <div className="mt-4 p-3.5 sm:p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/60">
-            <div className="flex items-center justify-between gap-2 mb-1.5">
-              <p className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Lightbulb className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" /> Resumen Ejecutivo de Alto Rendimiento
-              </p>
+        {/* --- STUDENT EDIT AND IA REGENERATION CONTROL CENTER --- */}
+        <div className="mt-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex-1">
+            <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <RefreshCw className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Personalización y Práctica Dinámica</span>
+            </h4>
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Modifica la guía teórica a tu gusto y genera de inmediato exámenes tipo test, preguntas de verdadero/falso y cartas basados en tu contenido actualizado.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setIsEditModeEnabled(!isEditModeEnabled)}
+              className={`flex items-center gap-1.5 px-3 py-2 min-h-[40px] text-xs font-bold rounded-xl transition-all cursor-pointer active:scale-95 border ${
+                isEditModeEnabled
+                  ? 'bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800'
+                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750'
+              }`}
+            >
+              <span>{isEditModeEnabled ? '🔒 Salir de Edición' : '📝 Habilitar Edición'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleRegeneratePractice}
+              disabled={isRegeneratingPractice}
+              className="flex items-center gap-2 px-4 py-2 min-h-[40px] text-xs font-extrabold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isRegeneratingPractice ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Generando Práctica IA...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>⚡ Regenerar Práctica IA</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Toast / Success notification for Practice Regeneration */}
+        {regeneratedMessage && (
+          <div className={`mt-3 p-4 rounded-xl border text-xs sm:text-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 ${
+            regeneratedMessage.startsWith('Error')
+              ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300'
+              : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-300'
+          }`}>
+            <div className="flex items-start gap-2">
+              <CheckCircle2 className={`w-5 h-5 shrink-0 ${regeneratedMessage.startsWith('Error') ? 'text-red-500' : 'text-emerald-500'}`} />
+              <span className="leading-relaxed">{regeneratedMessage}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
               <button
                 type="button"
-                onClick={() => handleStartAudioSummary('track-executive-summary')}
-                className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-blue-700 dark:text-blue-300 bg-white/90 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-slate-700 rounded-lg border border-blue-200 dark:border-blue-800 transition cursor-pointer"
-                title="Escuchar este resumen"
+                onClick={() => setRegeneratedMessage(null)}
+                className="px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700"
               >
-                <Volume2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                <span>Escuchar</span>
+                Cerrar
               </button>
+              {!regeneratedMessage.startsWith('Error') && onNavigateTab && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('exercises')}
+                  className="px-3.5 py-1.5 text-xs font-black text-white bg-slate-900 dark:bg-indigo-600 rounded-lg shadow hover:opacity-90 active:scale-95 transition-all"
+                >
+                  Probar Ejercicios →
+                </button>
+              )}
             </div>
-            <p className="text-xs sm:text-sm text-blue-950 dark:text-blue-200 leading-relaxed">
-              {studyGuide.executiveSummary}
-            </p>
+          </div>
+        )}
+
+        {/* Executive summary (shown if on 'all' or day 1) */}
+        {(selectedDayNumber === 'all' || selectedDayNumber === 1) && (studyGuide.executiveSummary || isEditModeEnabled) && (
+          <div className="mt-4 p-3.5 sm:p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/60">
+            {isEditingSummary ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Lightbulb className="w-4 h-4 text-blue-600 shrink-0" /> Editando Resumen Ejecutivo
+                  </span>
+                </div>
+                <textarea
+                  rows={4}
+                  value={summaryDraft}
+                  onChange={(e) => setSummaryDraft(e.target.value)}
+                  className="w-full p-3 text-xs sm:text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-blue-300 dark:border-blue-700 rounded-xl focus:ring-2 focus:ring-blue-500"
+                  placeholder="Escribe el nuevo resumen de alto rendimiento..."
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingSummary(false)}
+                    className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-800"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveSummary}
+                    className="flex items-center gap-1 px-3.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Guardar Resumen</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <p className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Lightbulb className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" /> Resumen Ejecutivo de Alto Rendimiento
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {isEditModeEnabled && (
+                      <button
+                        type="button"
+                        onClick={handleStartSummaryEdit}
+                        className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 bg-white/90 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-slate-700 rounded-lg border border-indigo-200 dark:border-indigo-800 transition cursor-pointer"
+                        title="Editar Resumen"
+                      >
+                        <Edit3 className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                        <span>Editar</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleStartAudioSummary('track-executive-summary')}
+                      className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-blue-700 dark:text-blue-300 bg-white/90 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-slate-700 rounded-lg border border-blue-200 dark:border-blue-800 transition cursor-pointer"
+                      title="Escuchar este resumen"
+                    >
+                      <Volume2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <span>Escuchar</span>
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs sm:text-sm text-blue-950 dark:text-blue-200 leading-relaxed whitespace-pre-wrap">
+                  {studyGuide.executiveSummary || 'No hay un resumen ejecutivo cargado todavía. Puedes presionar "Editar" para redactar uno.'}
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -644,10 +1013,110 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
               <Bookmark className="w-5 h-5 text-blue-600 dark:text-blue-400" /> 
               <span>Conceptos Fundamentales {selectedDayNumber !== 'all' ? `(Día ${selectedDayNumber})` : '(Ordenados por Día 1, 2, 3...)'}</span>
             </h3>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              {filteredConcepts.length} conceptos
-            </span>
+            <div className="flex items-center gap-2">
+              {isEditModeEnabled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddingConcept(prev => !prev);
+                    setConceptEditTitle('');
+                    setConceptEditExplanation('');
+                    setConceptEditExample('');
+                    setConceptEditImportance('medium');
+                    setConceptEditDay(typeof selectedDayNumber === 'number' ? selectedDayNumber : 1);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 border border-slate-300 dark:border-slate-700 rounded-xl shadow-xs cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{isAddingConcept ? 'Cerrar' : 'Añadir Concepto'}</span>
+                </button>
+              )}
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
+                {filteredConcepts.length} conceptos
+              </span>
+            </div>
           </div>
+
+          {/* New Concept Form */}
+          {isAddingConcept && (
+            <div className="p-4 sm:p-5 bg-white dark:bg-slate-900 border-2 border-dashed border-blue-300 dark:border-blue-800 rounded-2xl space-y-3.5 shadow-xs">
+              <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">Crear Nuevo Concepto</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="sm:col-span-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Día</label>
+                  <select
+                    value={conceptEditDay}
+                    onChange={(e) => setConceptEditDay(Number(e.target.value))}
+                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                  >
+                    {schedule.map((d) => (
+                      <option key={d.dayNumber} value={d.dayNumber}>Día {d.dayNumber}</option>
+                    ))}
+                    {schedule.length === 0 && <option value={1}>Día 1</option>}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Título del Concepto *</label>
+                  <input
+                    type="text"
+                    value={conceptEditTitle}
+                    onChange={(e) => setConceptEditTitle(e.target.value)}
+                    placeholder="Ej: Principios de Farmacocinética Veterinaria"
+                    className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                  />
+                </div>
+                <div className="sm:col-span-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Importancia</label>
+                  <select
+                    value={conceptEditImportance}
+                    onChange={(e) => setConceptEditImportance(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                  >
+                    <option value="critical">⚡ Imprescindible</option>
+                    <option value="high">🔥 Alto Impacto</option>
+                    <option value="medium">✨ Complementario</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Explicación Completa *</label>
+                <textarea
+                  rows={4}
+                  value={conceptEditExplanation}
+                  onChange={(e) => setConceptEditExplanation(e.target.value)}
+                  placeholder="Escribe la explicación detallada..."
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Ejemplo o Fórmula (Opcional)</label>
+                <input
+                  type="text"
+                  value={conceptEditExample}
+                  onChange={(e) => setConceptEditExample(e.target.value)}
+                  placeholder="Ej: Clearance = Vd * Kel"
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingConcept(false)}
+                  className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddConcept}
+                  disabled={!conceptEditTitle.trim() || !conceptEditExplanation.trim()}
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl disabled:opacity-50"
+                >
+                  Guardar Concepto
+                </button>
+              </div>
+            </div>
+          )}
 
           {filteredConcepts.length === 0 ? (
             <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-500">
@@ -655,16 +1124,138 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredConcepts.map((concept, idx) => (
-                <ConceptCard
-                  key={idx}
-                  concept={concept}
-                  index={idx}
-                  plan={plan}
-                  onAskTutor={onAskTutor}
-                  onStartAudioSummary={handleStartAudioSummary}
-                />
-              ))}
+              {filteredConcepts.map((concept, idx) => {
+                const originalIdx = rawConcepts.findIndex(
+                  c => c.title === concept.title && c.explanation === concept.explanation
+                );
+                const isEditing = editingConceptIndex === originalIdx;
+
+                if (isEditing) {
+                  return (
+                    <div
+                      key={idx}
+                      className="rounded-2xl border-2 border-blue-400 dark:border-blue-600 p-4 sm:p-5 bg-white dark:bg-slate-900 shadow-md space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                          <Edit3 className="w-4 h-4 text-blue-600" />
+                          <span>Editar Concepto Fundacional</span>
+                        </h4>
+                        <span className="text-xs text-slate-400 font-mono">Día {conceptEditDay}</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div className="sm:col-span-1">
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Día</label>
+                          <select
+                            value={conceptEditDay}
+                            onChange={(e) => setConceptEditDay(Number(e.target.value))}
+                            className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100"
+                          >
+                            {schedule.map((d) => (
+                              <option key={d.dayNumber} value={d.dayNumber}>Día {d.dayNumber}</option>
+                            ))}
+                            {schedule.length === 0 && <option value={1}>Día 1</option>}
+                          </select>
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Título del Concepto</label>
+                          <input
+                            type="text"
+                            value={conceptEditTitle}
+                            onChange={(e) => setConceptEditTitle(e.target.value)}
+                            className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-1">
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Importancia</label>
+                          <select
+                            value={conceptEditImportance}
+                            onChange={(e) => setConceptEditImportance(e.target.value as any)}
+                            className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100"
+                          >
+                            <option value="critical">⚡ Imprescindible</option>
+                            <option value="high">🔥 Alto Impacto</option>
+                            <option value="medium">✨ Complementario</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Explicación Completa</label>
+                        <textarea
+                          rows={4}
+                          value={conceptEditExplanation}
+                          onChange={(e) => setConceptEditExplanation(e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Ejemplo o Fórmula Relacionada</label>
+                        <input
+                          type="text"
+                          value={conceptEditExample}
+                          onChange={(e) => setConceptEditExample(e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100"
+                        />
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingConceptIndex(null)}
+                          className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-800"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveConcept(originalIdx)}
+                          className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Guardar Cambios</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={idx} className="relative group">
+                    <ConceptCard
+                      concept={concept}
+                      index={idx}
+                      plan={plan}
+                      onAskTutor={onAskTutor}
+                      onStartAudioSummary={handleStartAudioSummary}
+                    />
+                    {isEditModeEnabled && (
+                      <div className="absolute top-4 right-16 flex items-center gap-1 bg-white/90 dark:bg-slate-900/90 p-1 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm z-10 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={() => handleStartConceptEdit(concept, originalIdx)}
+                          className="p-1 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded"
+                          title="Editar concepto"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteConcept(originalIdx)}
+                          className="p-1 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded"
+                          title="Eliminar concepto"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -678,10 +1269,97 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
               <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> 
               <span>Fórmulas y Definiciones Clave {selectedDayNumber !== 'all' ? `(Día ${selectedDayNumber})` : '(Ordenadas por Día 1, 2, 3...)'}</span>
             </h3>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              {filteredFormulas.length} fórmulas
-            </span>
+            <div className="flex items-center gap-2">
+              {isEditModeEnabled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddingFormula(prev => !prev);
+                    setFormulaEditTerm('');
+                    setFormulaEditDefinition('');
+                    setFormulaEditSyntax('');
+                    setFormulaEditDay(typeof selectedDayNumber === 'number' ? selectedDayNumber : 1);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 border border-slate-300 dark:border-slate-700 rounded-xl shadow-xs cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>{isAddingFormula ? 'Cerrar' : 'Añadir Fórmula'}</span>
+                </button>
+              )}
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-1 rounded-lg">
+                {filteredFormulas.length} fórmulas
+              </span>
+            </div>
           </div>
+
+          {/* New Formula Form */}
+          {isAddingFormula && (
+            <div className="p-4 sm:p-5 bg-white dark:bg-slate-900 border-2 border-dashed border-indigo-300 dark:border-indigo-800 rounded-2xl space-y-3.5 shadow-xs">
+              <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">Crear Nueva Fórmula / Definición</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="sm:col-span-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Día</label>
+                  <select
+                    value={formulaEditDay}
+                    onChange={(e) => setFormulaEditDay(Number(e.target.value))}
+                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                  >
+                    {schedule.map((d) => (
+                      <option key={d.dayNumber} value={d.dayNumber}>Día {d.dayNumber}</option>
+                    ))}
+                    {schedule.length === 0 && <option value={1}>Día 1</option>}
+                  </select>
+                </div>
+                <div className="sm:col-span-3">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Término o Concepto Matemático *</label>
+                  <input
+                    type="text"
+                    value={formulaEditTerm}
+                    onChange={(e) => setFormulaEditTerm(e.target.value)}
+                    placeholder="Ej: Clearance Total (Cl)"
+                    className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Definición o Explicación del Término *</label>
+                <textarea
+                  rows={3}
+                  value={formulaEditDefinition}
+                  onChange={(e) => setFormulaEditDefinition(e.target.value)}
+                  placeholder="Explica qué mide y cómo se interpreta este término en el examen..."
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Fórmula o Sintaxis Matemática (Opcional)</label>
+                <input
+                  type="text"
+                  value={formulaEditSyntax}
+                  onChange={(e) => setFormulaEditSyntax(e.target.value)}
+                  placeholder="Ej: Cl = Kel * Vd"
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 font-mono"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingFormula(false)}
+                  className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddFormula}
+                  disabled={!formulaEditTerm.trim() || !formulaEditDefinition.trim()}
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50"
+                >
+                  Guardar Fórmula
+                </button>
+              </div>
+            </div>
+          )}
 
           {filteredFormulas.length === 0 ? (
             <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-500">
@@ -691,10 +1369,96 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredFormulas.map((item, idx) => {
                 const dayNum = item.dayNumber || 1;
+                const originalIdx = rawFormulas.findIndex(
+                  f => f.term === item.term && f.definition === item.definition
+                );
+                const isEditing = editingFormulaIndex === originalIdx;
+
+                if (isEditing) {
+                  return (
+                    <div
+                      key={idx}
+                      className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-indigo-400 dark:border-indigo-600 p-4 shadow-md space-y-3 sm:col-span-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                          <Edit3 className="w-4 h-4 text-indigo-600" />
+                          <span>Editar Fórmula o Definición</span>
+                        </h4>
+                        <span className="text-xs text-slate-400 font-mono">Día {formulaEditDay}</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div className="sm:col-span-1">
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Día</label>
+                          <select
+                            value={formulaEditDay}
+                            onChange={(e) => setFormulaEditDay(Number(e.target.value))}
+                            className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100"
+                          >
+                            {schedule.map((d) => (
+                              <option key={d.dayNumber} value={d.dayNumber}>Día {d.dayNumber}</option>
+                            ))}
+                            {schedule.length === 0 && <option value={1}>Día 1</option>}
+                          </select>
+                        </div>
+
+                        <div className="sm:col-span-3">
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Término o Concepto</label>
+                          <input
+                            type="text"
+                            value={formulaEditTerm}
+                            onChange={(e) => setFormulaEditTerm(e.target.value)}
+                            className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Definición o Explicación</label>
+                        <textarea
+                          rows={3}
+                          value={formulaEditDefinition}
+                          onChange={(e) => setFormulaEditDefinition(e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Sintaxis o Fórmula</label>
+                        <input
+                          type="text"
+                          value={formulaEditSyntax}
+                          onChange={(e) => setFormulaEditSyntax(e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 font-mono"
+                        />
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingFormulaIndex(null)}
+                          className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-800"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveFormula(originalIdx)}
+                          className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Guardar Fórmula</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div
                     key={idx}
-                    className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs"
+                    className="relative group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs"
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -706,6 +1470,26 @@ export const StudyGuideView: React.FC<StudyGuideViewProps> = ({
                         </h4>
                       </div>
                       <div className="flex items-center gap-1">
+                        {isEditModeEnabled && (
+                          <div className="flex items-center gap-1 mr-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                            <button
+                              type="button"
+                              onClick={() => handleStartFormulaEdit(item, originalIdx)}
+                              className="p-1 text-slate-500 hover:text-blue-600 hover:bg-white rounded transition"
+                              title="Editar fórmula"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteFormula(originalIdx)}
+                              className="p-1 text-slate-500 hover:text-red-600 hover:bg-white rounded transition"
+                              title="Eliminar fórmula"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleStartAudioSummary(`track-formula-${idx}-${item.term}`)}

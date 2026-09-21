@@ -69,6 +69,12 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [difficultyFilter, setDifficultyFilter] = useState<'all' | 'basic' | 'intermediate' | 'advanced' | 'mastery'>('all');
 
+  // Countdown Timer States for Exam Mode
+  const [hasTimeLimit, setHasTimeLimit] = useState<boolean>(false);
+  const [selectedDuration, setSelectedDuration] = useState<number>(300); // Default 5 minutes
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
+
   const rawExercises = Array.isArray(plan?.exercises) ? plan.exercises : [];
   const schedule = Array.isArray(plan?.schedule) ? plan.schedule : [];
 
@@ -312,6 +318,7 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
 
   const handleFinishExam = () => {
     setSubmitted(true);
+    setIsTimerRunning(false);
     if (mcqPercentage >= plan.targetGrade) {
       confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 } });
     }
@@ -351,12 +358,76 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
     }
   };
 
+  // Timer Countdown Effect
+  React.useEffect(() => {
+    let timerId: any = null;
+    if (isExamMode && isTimerRunning && hasTimeLimit && timeLeft > 0 && !submitted) {
+      timerId = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timerId);
+            // Automatic finalization when countdown reaches 0
+            setSubmitted(true);
+            setIsTimerRunning(false);
+            
+            // Save answers automatically on timeout
+            if (onUpdatePlan) {
+              const updatedExercises = plan.exercises.map(ex => {
+                const dayExIds = dayExercises.map(de => de.id);
+                if (dayExIds.includes(ex.id)) {
+                  const selectedOpt = selectedAnswers[ex.id];
+                  if (selectedOpt !== undefined) {
+                    const activeCorrect = shuffledExercisesMap[ex.id]?.correctAnswer || ex.correctAnswer;
+                    return {
+                      ...ex,
+                      userAnswer: selectedOpt,
+                      isCorrect: selectedOpt === activeCorrect,
+                    };
+                  }
+                }
+                return ex;
+              });
+
+              onUpdatePlan({
+                ...plan,
+                exercises: updatedExercises,
+                updatedAt: new Date().toISOString()
+              });
+            }
+
+            if (onSaveQuizResult) {
+              onSaveQuizResult({
+                score: correctCount,
+                total: mcqExercises.length,
+                percentage: mcqPercentage,
+              });
+            }
+
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timerId) clearInterval(timerId);
+    };
+  }, [isExamMode, isTimerRunning, hasTimeLimit, timeLeft, submitted, plan, dayExercises, selectedAnswers, shuffledExercisesMap, correctCount, mcqExercises.length, mcqPercentage, onUpdatePlan, onSaveQuizResult]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
   const handleReset = () => {
     setSelectedAnswers({});
     setOpenAnswers({});
     setOpenEvaluations({});
     setShowHints({});
     setSubmitted(false);
+    setIsTimerRunning(false);
+    setTimeLeft(0);
 
     // Clear answers from the plan
     if (onUpdatePlan) {
@@ -561,8 +632,13 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
             <button
               type="button"
               onClick={() => {
-                setIsExamMode(!isExamMode);
+                const nextMode = !isExamMode;
+                setIsExamMode(nextMode);
                 setSubmitted(false);
+                if (!nextMode) {
+                  setIsTimerRunning(false);
+                  setTimeLeft(0);
+                }
               }}
               className={`flex-1 sm:flex-initial px-3.5 py-2.5 min-h-[44px] text-xs font-semibold rounded-xl border transition-all cursor-pointer flex items-center justify-center active:scale-95 ${
                 isExamMode
@@ -586,6 +662,110 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
             )}
           </div>
         </div>
+
+        {/* Timer Setup and Configuration Banner */}
+        {isExamMode && !submitted && !isTimerRunning && (
+          <div className="mt-4 p-4 rounded-xl bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-sm font-bold text-amber-900 dark:text-amber-300 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-600" />
+                <span>Configuración del Simulacro de Examen</span>
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Pon a prueba tus conocimientos en un simulacro real. Puedes establecer un límite de tiempo estricto que entregará tus respuestas de forma automática cuando expire.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hasTimeLimit}
+                  onChange={(e) => setHasTimeLimit(e.target.checked)}
+                  className="rounded border-slate-300 dark:border-slate-700 text-amber-600 focus:ring-amber-500 h-4 w-4"
+                />
+                <span>Límetro regresivo</span>
+              </label>
+
+              {hasTimeLimit && (
+                <select
+                  value={selectedDuration}
+                  onChange={(e) => setSelectedDuration(Number(e.target.value))}
+                  className="px-2.5 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-950 dark:text-slate-100 font-semibold"
+                >
+                  <option value={60}>1 minuto (Prueba rápida)</option>
+                  <option value={300}>5 minutos</option>
+                  <option value={600}>10 minutos</option>
+                  <option value={900}>15 minutos</option>
+                  <option value={1800}>30 minutos</option>
+                  <option value={3600}>60 minutos</option>
+                </select>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (hasTimeLimit) {
+                    setTimeLeft(selectedDuration);
+                  }
+                  setIsTimerRunning(true);
+                }}
+                className="px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
+              >
+                🚀 Comenzar Simulacro
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Live Active Timer Banner */}
+        {isExamMode && !submitted && isTimerRunning && (
+          <div className={`mt-4 p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300 ${
+            hasTimeLimit && timeLeft <= 60
+              ? 'bg-red-50 dark:bg-red-950/40 border-red-300 dark:border-red-900 animate-pulse text-red-900 dark:text-red-200'
+              : 'bg-indigo-50/60 dark:bg-indigo-950/20 border-indigo-150 dark:border-indigo-900 text-indigo-900 dark:text-indigo-200'
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${
+                hasTimeLimit && timeLeft <= 60 ? 'bg-red-200 dark:bg-red-900 text-red-800' : 'bg-indigo-100 dark:bg-indigo-900 text-indigo-600'
+              }`}>
+                <Clock className="w-5 h-5 shrink-0" />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider">
+                  {hasTimeLimit ? 'Examen en Progreso (Cronometrado)' : 'Examen en Progreso (Práctica libre)'}
+                </p>
+                <p className="text-[11px] opacity-80 mt-0.5">
+                  Preguntas respondidas: {Object.keys(selectedAnswers).filter(id => dayExercises.some(de => de.id === id)).length} de {dayExercises.length}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              {hasTimeLimit ? (
+                <div className="flex flex-col items-end">
+                  <span className={`text-2xl font-black tracking-tight font-mono ${
+                    timeLeft <= 30 ? 'text-red-600 dark:text-red-400' : ''
+                  }`}>
+                    {formatTime(timeLeft)}
+                  </span>
+                  <span className="text-[9px] font-bold uppercase tracking-widest opacity-75">Tiempo restante</span>
+                </div>
+              ) : (
+                <span className="px-3 py-1.5 bg-indigo-100 dark:bg-indigo-900 rounded-lg text-xs font-bold">
+                  Sin límite de tiempo
+                </span>
+              )}
+
+              <button
+                type="button"
+                onClick={handleFinishExam}
+                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-xl transition shadow-xs cursor-pointer active:scale-95"
+              >
+                Entregar Examen
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Results Banner (when submitted) */}
         {submitted && (
@@ -689,7 +869,33 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({
 
       {/* Exercises List */}
       <div className="space-y-5">
-        {dayExercises.length === 0 ? (
+        {isExamMode && !isTimerRunning && !submitted ? (
+          <div className="p-8 sm:p-12 text-center bg-slate-50 dark:bg-slate-900 rounded-3xl border-2 border-dashed border-slate-300 dark:border-slate-800 text-slate-500 space-y-4 flex flex-col items-center justify-center min-h-[350px]">
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center animate-bounce">
+              <Clock className="w-8 h-8" />
+            </div>
+            <div className="max-w-md space-y-2">
+              <h3 className="text-lg font-black text-slate-900 dark:text-slate-100">
+                ⏱️ Simulacro de Examen Preparado
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                El modo simulacro desactiva las explicaciones de respuestas inmediatas y las pistas para simular condiciones de evaluación reales. Configura tu temporizador y presiona el botón inferior para revelar el examen.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (hasTimeLimit) {
+                  setTimeLeft(selectedDuration);
+                }
+                setIsTimerRunning(true);
+              }}
+              className="px-6 py-3.5 text-xs font-black uppercase text-white bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 rounded-2xl shadow-md hover:scale-102 active:scale-98 transition-all cursor-pointer"
+            >
+              Comenzar Simulacro de Examen
+            </button>
+          </div>
+        ) : dayExercises.length === 0 ? (
           <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-500 space-y-3">
             <p className="font-semibold text-slate-700 dark:text-slate-300">
               No hay ejercicios registrados para el Día {selectedDayNumber}.

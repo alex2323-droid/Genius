@@ -78,7 +78,7 @@ export interface MaterialComplexityProfile {
  * 4. Quantity and richness of student documents (files, words, slides)
  */
 export function computeMaterialComplexityProfile(
-  files: Array<{ name: string; type?: string; text?: string; slideCount?: number; wordCount?: number }>,
+  files: Array<{ name: string; type?: string; text?: string; slideCount?: number; wordCount?: number; base64?: string }>,
   customNotes?: string,
   targetGrade = 85,
   daysLeft = 3,
@@ -94,9 +94,17 @@ export function computeMaterialComplexityProfile(
     if (f.wordCount) {
       totalWords += f.wordCount;
     } else {
-      totalWords += text.trim() ? text.trim().split(/\s+/).length : 0;
+      const wordsInText = text.trim() ? text.trim().split(/\s+/).length : 0;
+      const isScannedOrImage = text.includes('Escaneado o basado en imágenes') || text.includes('Imagen:') || f.name.toLowerCase().endsWith('.png') || f.name.toLowerCase().endsWith('.jpg') || f.name.toLowerCase().endsWith('.jpeg') || f.name.toLowerCase().endsWith('.webp');
+      if (wordsInText < 50 && isScannedOrImage) {
+        // Assume 500 equivalent words for complex visual materials/scanned PDFs to keep guide generation rich
+        totalWords += 500;
+      } else {
+        totalWords += wordsInText;
+      }
     }
     if (f.slideCount) {
+      totalWords += f.slideCount * 60; // Approximate words per slide for visual metrics
       slideCount += f.slideCount;
     }
   }

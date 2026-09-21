@@ -131,6 +131,7 @@ export interface StudyPlan {
   providerId?: string;
   aiCompetitionResult?: AICompetitionResult;
   materialComplexity?: MaterialComplexityMeta;
+  adaptiveMethod?: string;
   sourceDocuments?: Array<{
     fileName: string;
     snippet?: string;

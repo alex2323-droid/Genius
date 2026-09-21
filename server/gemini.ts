@@ -204,15 +204,35 @@ DIRECTRICES OBLIGATORIAS DE ANÁLISIS DOCUMENTAL Y NO-REPETICIÓN ABSOLUTA:
   // Pre-analyze documents for semantic ground truth
   const docData = analyzeStudentDocuments(files, customNotes, subject, gradeTarget, numDays, dailyHours);
 
-  // Check if any file has base64 pdf data
-  const pdfFile = files.find(f => (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) && f.base64);
-  const pdfBase64 = pdfFile?.base64;
+  // Extract all media files (PDFs and images) that contain base64 content
+  const mediaFiles = files
+    .filter(f => {
+      const nameLower = f.name.toLowerCase();
+      const isPdf = f.type === 'application/pdf' || nameLower.endsWith('.pdf');
+      const isImage = f.type?.startsWith('image/') || nameLower.endsWith('.png') || nameLower.endsWith('.jpg') || nameLower.endsWith('.jpeg') || nameLower.endsWith('.webp');
+      return (isPdf || isImage) && f.base64;
+    })
+    .map(f => {
+      const nameLower = f.name.toLowerCase();
+      let mimeType = f.type;
+      if (!mimeType) {
+        if (nameLower.endsWith('.pdf')) mimeType = 'application/pdf';
+        else if (nameLower.endsWith('.png')) mimeType = 'image/png';
+        else if (nameLower.endsWith('.jpg') || nameLower.endsWith('.jpeg')) mimeType = 'image/jpeg';
+        else if (nameLower.endsWith('.webp')) mimeType = 'image/webp';
+      }
+      return {
+        base64: f.base64!,
+        mimeType: mimeType || 'application/pdf',
+        name: f.name,
+      };
+    });
 
   try {
     const result = await executeMultiAIRequest({
       prompt: promptText,
       isJson: true,
-      pdfBase64,
+      mediaFiles,
       preferredProvider,
       systemPrompt: 'Eres un profesor universitario y tutor pedagógico de élite. Responde exclusivamente con un objeto JSON válido.',
     });
@@ -835,4 +855,324 @@ Genera un JSON válido con la siguiente estructura:
     };
   }
 }
+
+export async function regeneratePracticeWithAI(params: {
+  subject: string;
+  studyGuide: {
+    executiveSummary?: string;
+    coreConcepts?: Array<{ title: string; explanation: string; importance?: string; exampleOrFormula?: string; dayNumber?: number }>;
+    keyDefinitionsAndFormulas?: Array<{ term: string; definition: string; formulaOrSyntax?: string; dayNumber?: number }>;
+    commonExamTraps?: Array<{ mistake: string; correction: string; whyItMatters?: string; dayNumber?: number }>;
+  };
+  targetGrade?: number;
+  preferredProvider?: string;
+}) {
+  const { subject, studyGuide, targetGrade = 85, preferredProvider } = params;
+
+  // Extract a summary of the concepts, formulas, and traps to construct a dense prompt context
+  const conceptsText = (studyGuide.coreConcepts || [])
+    .map((c, i) => `Concepto ${i + 1}: ${c.title}\nImportancia: ${c.importance || 'N/A'}\nExplicación: ${c.explanation}\nEjemplo/Fórmula: ${c.exampleOrFormula || 'N/A'}`)
+    .join('\n\n');
+
+  const formulasText = (studyGuide.keyDefinitionsAndFormulas || [])
+    .map((f, i) => `Fórmula/Definición ${i + 1}: ${f.term}\nDefinición: ${f.definition}\nSintaxis/Ecuación: ${f.formulaOrSyntax || 'N/A'}`)
+    .join('\n\n');
+
+  const trapsText = (studyGuide.commonExamTraps || [])
+    .map((t, i) => `Trampa/Error común ${i + 1}: ${t.mistake}\nCorrección: ${t.correction}\nPor qué importa: ${t.whyItMatters || 'N/A'}`)
+    .join('\n\n');
+
+  const guideSummary = `
+--- RESUMEN EJECUTIVO DE LA GUÍA ---
+${studyGuide.executiveSummary || 'No provisto'}
+
+--- CONCEPTOS CLAVE ---
+${conceptsText || 'No provistos'}
+
+--- FÓRMULAS Y DEFINICIONES ---
+${formulasText || 'No provistas'}
+
+--- TRAMPAS DE EXAMEN ---
+${trapsText || 'No provistas'}
+`;
+
+  const prompt = `
+Actúa como un profesor universitario y examinador experto de alto rendimiento.
+Se te proporciona una GUÍA DE ESTUDIO personalizada que el estudiante acaba de editar o revisar.
+Tu objetivo es generar material de práctica de alta calidad basado EXCLUSIVAMENTE en la información de esta guía.
+
+Materia general: "${subject}"
+Nota objetivo del alumno: ${targetGrade}%
+
+INSTRUCCIONES DE GENERACIÓN:
+1. Genera exactamente 4 preguntas tipo test de opción múltiple ("type": "mcq"). Cada una debe tener 4 opciones y una única respuesta correcta.
+2. Genera exactamente 4 preguntas de Verdadero o Falso ("type": "true_false"). Las opciones deben ser exactamente ["Verdadero", "Falso"].
+3. Genera exactamente 6 Flashcards ("cartas de estudio") de memorización activa cubriendo los temas de la guía.
+4. Asegura que todos los ejercicios incluyan pistas de ayuda ("hint") y explicaciones pedagógicas exhaustivas paso a paso ("explanation") que conecten directamente con los conceptos de la guía.
+5. Asigna a cada ejercicio un "difficulty" adecuado al nivel del alumno (por ejemplo: "basic", "intermediate" o "advanced") y un campo "dayNumber" (puedes distribuir de forma secuencial del 1 al 3 o usar el "dayNumber" indicado en la guía).
+
+Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura exacta:
+{
+  "exercises": [
+    {
+      "id": "ex-custom-1",
+      "type": "mcq",
+      "difficulty": "intermediate",
+      "dayNumber": 1,
+      "question": "Pregunta de opción múltiple basada en la guía...",
+      "options": ["Opción A", "Opción B", "Opción C", "Opción D"],
+      "correctAnswer": "Opción A",
+      "explanation": "Explicación detallada de por qué esta opción es correcta basada en la guía...",
+      "hint": "Pista útil para el alumno...",
+      "points": 10
+    },
+    {
+      "id": "ex-custom-tf-1",
+      "type": "true_false",
+      "difficulty": "intermediate",
+      "dayNumber": 1,
+      "question": "Pregunta de Verdadero o Falso basada en la guía...",
+      "options": ["Verdadero", "Falso"],
+      "correctAnswer": "Verdadero",
+      "explanation": "Explicación detallada de por qué es Verdadero/Falso...",
+      "hint": "Recuerda las hipótesis de contorno...",
+      "points": 10
+    }
+  ],
+  "flashcards": [
+    {
+      "id": "fc-custom-1",
+      "front": "¿Anverso de la flashcard basada en la guía?",
+      "back": "Reverso explicativo detallado",
+      "category": "Conceptos Clave",
+      "dayNumber": 1
+    }
+  ]
+}
+
+Esta es la GUÍA DE ESTUDIO editada sobre la cual debes basar tu generación:
+${guideSummary}
+`;
+
+  try {
+    const result = await executeMultiAIRequest({
+      prompt,
+      isJson: true,
+      preferredProvider,
+      systemPrompt: 'Eres un diseñador de exámenes académicos experto y riguroso. Responde exclusivamente con el objeto JSON solicitado.',
+    });
+
+    return {
+      practice: result.data,
+      providerUsed: result.providerUsed,
+      providerId: result.providerId,
+    };
+  } catch (err: any) {
+    console.warn('[Gemini Service] Fallback de práctica custom por contingencia:', err?.message || err);
+
+    // Generate neat default practice on fallback
+    const exercises: any[] = [];
+    const flashcards: any[] = [];
+
+    // Fallback MCQ questions
+    const fallbackConceptTitles = (studyGuide.coreConcepts || []).slice(0, 2).map(c => c.title);
+    const concept1 = fallbackConceptTitles[0] || 'Temas de la Guía';
+    const concept2 = fallbackConceptTitles[1] || 'Fórmulas Clave';
+
+    exercises.push({
+      id: `ex-custom-fallback-1`,
+      type: "mcq",
+      difficulty: "intermediate",
+      dayNumber: 1,
+      question: `¿Cuál de las siguientes afirmaciones describe de forma más exacta el concepto de "${concept1}" según lo detallado en tu guía de estudio?`,
+      options: [
+        `Es un postulado fundamental que integra condiciones de contorno específicas y requiere análisis riguroso de variables.`,
+        "Es un supuesto secundario que se puede omitir durante cálculos rápidos en el examen.",
+        "Se limita a una regla empírica informal sin justificación de validez científica.",
+        "Aplica solo para casos singulares donde todas las magnitudes operacionales se reducen a cero."
+      ],
+      correctAnswer: `Es un postulado fundamental que integra condiciones de contorno específicas y requiere análisis riguroso de variables.`,
+      explanation: `Esta opción representa la descripción más rigurosa y correcta del tema "${concept1}" registrado en tu guía de estudio editada.`,
+      hint: `Busca la opción que resalta la formalidad teórica de "${concept1}".`,
+      points: 10
+    });
+
+    // Fallback True/False questions
+    exercises.push({
+      id: `ex-custom-fallback-tf-1`,
+      type: "true_false",
+      difficulty: "basic",
+      dayNumber: 1,
+      question: `¿Es verdadero o falso que las ecuaciones y principios de "${concept2}" se aplican sin restricciones operativas en todas las evaluaciones del curso?`,
+      options: ["Verdadero", "Falso"],
+      correctAnswer: "Falso",
+      explanation: `Falso. Como indica tu guía de estudio, es un error común (trampa clásica de examen) omitir los supuestos de contorno antes de aplicar ecuaciones de "${concept2}".`,
+      hint: "Revisa la sección de Trampas de Examen de tu guía.",
+      points: 10
+    });
+
+    // Fallback Flashcards
+    flashcards.push({
+      id: `fc-custom-fallback-1`,
+      front: `¿Cuál es el enfoque central de la guía sobre "${concept1}"?`,
+      back: `Asegurar el dominio teórico y práctico de este tema, prestando atención a las trampas identificadas y aplicando fórmulas correctas.`,
+      category: "Conceptos Editados",
+      dayNumber: 1
+    });
+
+    return {
+      practice: {
+        exercises,
+        flashcards
+      },
+      providerUsed: 'Generador Académico Local (Modo Respaldo Alta Disponibilidad)',
+      providerId: 'local'
+    };
+  }
+}
+
+/**
+ * GROUNDED CHAT QUESTION-ANSWERING (NotebookLM Style)
+ */
+export async function askNotebookLMChat(
+  question: string,
+  sources: Array<{ fileName: string; fullText: string }>,
+  chatHistory: Array<{ role: 'user' | 'model'; text: string }> = [],
+  preferredProvider?: string
+) {
+  try {
+    const serializedSources = sources.map((s, idx) => `
+--- FUENTE [${idx + 1}]: "${s.fileName}" ---
+${s.fullText.slice(0, 8000)}
+`).join('\n');
+
+    const historyPrompt = chatHistory.length > 0 
+      ? `HISTORIAL DE LA CONVERSACIÓN:\n${chatHistory.map(h => `${h.role === 'user' ? 'Estudiante' : 'NotebookLM'}: ${h.text}`).join('\n')}\n`
+      : '';
+
+    const prompt = `
+Actúa como la inteligencia artificial analítica de "NotebookLM", un espacio de trabajo inteligente para el análisis profundo de documentos.
+Tu meta es responder a la pregunta del estudiante basándote ÚNICAMENTE en el contenido de los documentos de origen proporcionados a continuación.
+
+REGLAS CRÍTICAS:
+1. Sé extremadamente preciso, riguroso y objetivo. No inventes información que no esté sustentada en las fuentes.
+2. Si un dato no se encuentra en las fuentes, indícalo claramente con amabilidad pedagógica.
+3. CITA SIEMPRE LAS FUENTES. Cada vez que expliques una afirmación, dato o fórmula clave extraída de un archivo, agrega al final de la frase o párrafo la cita correspondiente entre corchetes, por ejemplo: [${sources[0]?.fileName || 'Documento de Origen'}].
+4. Responde con un tono empático, inteligente y con formato Markdown sumamente profesional (negritas, listas, subtítulos).
+
+FUENTES DE ORIGEN DISPONIBLES:
+${serializedSources}
+
+${historyPrompt}
+NUEVA PREGUNTA DEL ESTUDIANTE:
+"${question}"
+
+Por favor, genera tu respuesta analítica en español, citando adecuadamente las fuentes en el texto:
+`;
+
+    const result = await executeMultiAIRequest({
+      prompt,
+      isJson: false,
+      preferredProvider,
+      systemPrompt: 'Eres NotebookLM, un asistente de investigación de élite. Responde citando los documentos provistos con [NombreArchivo].',
+    });
+
+    return {
+      answer: result.rawText,
+      providerUsed: result.providerUsed,
+      providerId: result.providerId,
+    };
+  } catch (err: any) {
+    console.error('Error in askNotebookLMChat:', err);
+    throw err;
+  }
+}
+
+/**
+ * NOTEBOOK INTERACTIVE GENERATORS (Executive Briefing, Podcast script, FAQ, Mindmap)
+ */
+export async function generateNotebookLMStudioContent(
+  type: 'briefing' | 'podcast' | 'faq' | 'mindmap',
+  sources: Array<{ fileName: string; fullText: string }>,
+  preferredProvider?: string
+) {
+  try {
+    const serializedSources = sources.map((s, idx) => `
+--- FUENTE [${idx + 1}]: "${s.fileName}" ---
+${s.fullText.slice(0, 10000)}
+`).join('\n');
+
+    let generatorPrompt = '';
+
+    if (type === 'briefing') {
+      generatorPrompt = `
+Genera un "Documento Informativo Ejecutivo" (Executive Briefing) integral que sintetice de forma magistral las fuentes provistas.
+El documento debe incluir:
+1. **Sinopsis de Materiales**: Una lista de todas las fuentes y su temática clave.
+2. **Temas Centrales e Ideas de Mayor Peso**: Desglose temático detallado fundamentado en los textos.
+3. **Glosario de Conceptos Críticos**: Definiciones exactas de términos especializados que aparecen en los archivos.
+4. **Resumen Integrado**: Un análisis descriptivo fluido que conecte los distintos archivos entre sí.
+
+Usa formato Markdown elegante y profesional en español. Cita los archivos de origen con [NombreArchivo] al final de los datos clave extraídos.
+`;
+    } else if (type === 'podcast') {
+      generatorPrompt = `
+Genera la transcripción de una "Guía de Audio en Pareja" (Deep Dive Audio Overview), el famoso formato de Podcast de NotebookLM.
+Consiste en una conversación sumamente animada, amena y dinámica entre dos presentadores de radio inteligentes y carismáticos en español: LAURA (curiosa, analítica, le encanta simplificar lo complejo) y DIEGO (pedagógico, con un toque de humor, experto en analogies cotidianas).
+
+PAUTAS DEL DIÁLOGO:
+1. Deben explicar los conceptos más difíciles y las fórmulas de las fuentes usando analogías sorprendentes y divertidas del día a día.
+2. Su química debe ser excelente: bromean amistosamente, se complementan las frases ("Exacto Diego, y lo mejor de todo es que...", "Espera, Laura, ¿estás diciendo que...?"), y demuestran asombro genuino por los descubrimientos.
+3. No hables en tono aburrido. Debe parecer un podcast real de alta producción de Spotify o Google Podcasts.
+4. Redacta el guion en español con formato de diálogo:
+   - **LAURA:** (entusiasmada) ¡Hola a todos! Hoy nos sumergiremos en...
+   - **DIEGO:** (riéndose) Sí, y prepárense porque lo que descubrimos en el archivo [NombreArchivo] es simplemente...
+
+Por favor, genera un guion largo, estructurado y sumamente entretenido que cubra fielmente la teoría principal de las fuentes.
+`;
+    } else if (type === 'faq') {
+      generatorPrompt = `
+Genera una sección interactiva de "Preguntas Frecuentes Guía (FAQ Document)" basada en los documentos provistos.
+Extrae y formula las 10 preguntas más desafiantes, integradoras o complejas que un profesor universitario plantearía sobre este material.
+Para cada pregunta, proporciona una respuesta detallada estructurada en Markdown, fundamentada exclusivamente en las fuentes, indicando de cuál de ellas se extrajo la solución.
+`;
+    } else if (type === 'mindmap') {
+      generatorPrompt = `
+Genera un "Mapa Conceptual y Estructural Lógico" de las fuentes.
+Debes diseñar una estructura jerárquica con viñetas anidadas Markdown, recuadros en bloque de texto y conectores que representen cómo se interrelacionan los temas de cada archivo.
+Hazlo sumamente denso en información académica, ordenado de general a particular, para que sirva como una herramienta perfecta de estudio visual en una sola página.
+`;
+    }
+
+    const prompt = `
+Eres la inteligencia artificial analítica de "NotebookLM Studio". tu especialidad es el análisis, síntesis y transformación pedagógica de archivos de estudio cargados por el usuario.
+
+FUENTES DISPONIBLES:
+${serializedSources}
+
+INSTRUCCIONES DE GENERACIÓN:
+${generatorPrompt}
+
+Genera el contenido transformativo completo en español basándote fielmente en las fuentes:
+`;
+
+    const result = await executeMultiAIRequest({
+      prompt,
+      isJson: false,
+      preferredProvider,
+      systemPrompt: 'Eres NotebookLM, experto en síntesis académica interactiva. Genera resúmenes, guiones de podcasts divertidos o diagramas en español.',
+    });
+
+    return {
+      content: result.rawText,
+      providerUsed: result.providerUsed,
+      providerId: result.providerId,
+    };
+  } catch (err: any) {
+    console.error('Error in generateNotebookLMStudioContent:', err);
+    throw err;
+  }
+}
+
+
 

@@ -177,6 +177,7 @@ function extractApiErrorMessage(status: number, rawText: string): string {
 async function callGemini(params: {
   prompt: string;
   pdfBase64?: string;
+  mediaFiles?: Array<{ base64: string; mimeType: string; name: string }>;
   isJson?: boolean;
 }): Promise<string> {
   const ai = getGeminiClient();
@@ -194,6 +195,21 @@ async function callGemini(params: {
       },
     });
   }
+
+  if (params.mediaFiles && params.mediaFiles.length > 0) {
+    params.mediaFiles.forEach(file => {
+      if (file.base64) {
+        const cleanB64 = file.base64.replace(/^data:[^;]+;base64,/, '').trim();
+        contents.push({
+          inlineData: {
+            mimeType: file.mimeType || 'application/pdf',
+            data: cleanB64,
+          },
+        });
+      }
+    });
+  }
+
   contents.push({ text: params.prompt });
 
   for (const model of models) {
@@ -235,6 +251,7 @@ async function callClaude(params: {
   isJson?: boolean;
   systemPrompt?: string;
   pdfBase64?: string;
+  mediaFiles?: Array<{ base64: string; mimeType: string; name: string }>;
 }): Promise<string> {
   const apiKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -268,6 +285,35 @@ async function callClaude(params: {
           },
         });
       }
+
+      if (params.mediaFiles && params.mediaFiles.length > 0) {
+        params.mediaFiles.forEach(file => {
+          if (file.base64) {
+            const cleanB64 = file.base64.replace(/^data:[^;]+;base64,/, '').trim();
+            const isImage = file.mimeType.startsWith('image/');
+            if (isImage) {
+              contentBlocks.push({
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: file.mimeType,
+                  data: cleanB64,
+                },
+              });
+            } else if (file.mimeType === 'application/pdf') {
+              contentBlocks.push({
+                type: 'document',
+                source: {
+                  type: 'base64',
+                  media_type: 'application/pdf',
+                  data: cleanB64,
+                },
+              });
+            }
+          }
+        });
+      }
+
       contentBlocks.push({
         type: 'text',
         text: params.prompt,
@@ -491,6 +537,7 @@ export interface MultiAIExecuteOptions {
   prompt: string;
   isJson?: boolean;
   pdfBase64?: string;
+  mediaFiles?: Array<{ base64: string; mimeType: string; name: string }>;
   systemPrompt?: string;
   preferredProvider?: string;
 }
@@ -510,7 +557,7 @@ export interface MultiAIResult<T = any> {
 export async function executeMultiAIRequest<T = any>(
   options: MultiAIExecuteOptions
 ): Promise<MultiAIResult<T>> {
-  const { prompt, isJson, pdfBase64, systemPrompt, preferredProvider } = options;
+  const { prompt, isJson, pdfBase64, mediaFiles, systemPrompt, preferredProvider } = options;
   const attemptsLog: string[] = [];
 
   const claudeKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
@@ -523,7 +570,7 @@ export async function executeMultiAIRequest<T = any>(
     } else {
       attemptsLog.push('Iniciando con Anthropic Claude (Messages API)...');
       try {
-        const rawText = await callClaude({ prompt, isJson, pdfBase64, systemPrompt });
+        const rawText = await callClaude({ prompt, isJson, pdfBase64, mediaFiles, systemPrompt });
         let parsedData: T | undefined = undefined;
         if (isJson) {
           parsedData = cleanAndParseJson<T>(rawText);
@@ -547,7 +594,7 @@ export async function executeMultiAIRequest<T = any>(
   // Try Google Gemini
   attemptsLog.push('Consultando Google Gemini (Motor Principal)...');
   try {
-    const rawText = await callGemini({ prompt, pdfBase64, isJson });
+    const rawText = await callGemini({ prompt, pdfBase64, mediaFiles, isJson });
     let parsedData: T | undefined = undefined;
     if (isJson) {
       parsedData = cleanAndParseJson<T>(rawText);
@@ -569,7 +616,7 @@ export async function executeMultiAIRequest<T = any>(
     if (isClaudeConfigured && preferredProvider !== 'claude') {
       attemptsLog.push('Activando respaldo automático con Anthropic Claude...');
       try {
-        const rawText = await callClaude({ prompt, isJson, pdfBase64, systemPrompt });
+        const rawText = await callClaude({ prompt, isJson, pdfBase64, mediaFiles, systemPrompt });
         let parsedData: T | undefined = undefined;
         if (isJson) {
           parsedData = cleanAndParseJson<T>(rawText);

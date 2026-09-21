@@ -5,7 +5,10 @@ import {
   generateTrapsWithAI,
   explainTopicWithAI, 
   gradeOpenAnswerWithAI,
-  getProvidersStatus 
+  getProvidersStatus,
+  regeneratePracticeWithAI,
+  askNotebookLMChat,
+  generateNotebookLMStudioContent
 } from './gemini.ts';
 import { generalLimiter, expensiveAiLimiter } from './rateLimiter.ts';
 
@@ -210,4 +213,80 @@ apiRouter.post('/generate-traps', expensiveAiLimiter, async (req: Request, res: 
     return res.status(500).json({ error: formatFriendlyErrorMessage(error) });
   }
 });
+
+apiRouter.post('/regenerate-practice', expensiveAiLimiter, async (req: Request, res: Response) => {
+  try {
+    const { subject, studyGuide, targetGrade, preferredProvider } = req.body;
+    if (!studyGuide) {
+      return res.status(400).json({ error: 'Falta la guía de estudio de referencia.' });
+    }
+
+    const result = await regeneratePracticeWithAI({
+      subject: subject || 'Materia de estudio',
+      studyGuide,
+      targetGrade: Number(targetGrade) || 85,
+      preferredProvider,
+    });
+
+    return res.json({
+      success: true,
+      practice: result.practice,
+      providerUsed: result.providerUsed,
+      providerId: result.providerId,
+    });
+  } catch (error: any) {
+    console.error('Error in regenerate-practice:', error);
+    return res.status(500).json({ error: formatFriendlyErrorMessage(error) });
+  }
+});
+
+// NotebookLM-style Grounded Chat Endpoint
+apiRouter.post('/notebook-chat', expensiveAiLimiter, async (req: Request, res: Response) => {
+  try {
+    const { question, sources, chatHistory, preferredProvider } = req.body;
+    if (!question) {
+      return res.status(400).json({ error: 'Falta la pregunta o consulta.' });
+    }
+    if (!sources || !Array.isArray(sources) || sources.length === 0) {
+      return res.status(400).json({ error: 'Es necesario seleccionar al menos una fuente de origen.' });
+    }
+
+    const result = await askNotebookLMChat(question, sources, chatHistory || [], preferredProvider);
+    return res.json({
+      success: true,
+      answer: result.answer,
+      providerUsed: result.providerUsed,
+      providerId: result.providerId
+    });
+  } catch (error: any) {
+    console.error('Error in notebook-chat:', error);
+    return res.status(500).json({ error: formatFriendlyErrorMessage(error) });
+  }
+});
+
+// NotebookLM-style Generative Content Endpoint
+apiRouter.post('/notebook-generate', expensiveAiLimiter, async (req: Request, res: Response) => {
+  try {
+    const { type, sources, preferredProvider } = req.body;
+    if (!type || !['briefing', 'podcast', 'faq', 'mindmap'].includes(type)) {
+      return res.status(400).json({ error: 'Tipo de generación inválido o ausente.' });
+    }
+    if (!sources || !Array.isArray(sources) || sources.length === 0) {
+      return res.status(400).json({ error: 'Es necesario adjuntar al menos una fuente de origen.' });
+    }
+
+    const result = await generateNotebookLMStudioContent(type, sources, preferredProvider);
+    return res.json({
+      success: true,
+      content: result.content,
+      providerUsed: result.providerUsed,
+      providerId: result.providerId
+    });
+  } catch (error: any) {
+    console.error('Error in notebook-generate:', error);
+    return res.status(500).json({ error: formatFriendlyErrorMessage(error) });
+  }
+});
+
+
 

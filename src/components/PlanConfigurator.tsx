@@ -44,6 +44,7 @@ interface PlanConfiguratorProps {
     customNotes: string;
     preferredProvider?: string;
     customStyleInstructions?: string;
+    adaptiveMethod?: string;
   }) => Promise<void>;
   isGenerating: boolean;
 }
@@ -88,6 +89,111 @@ const STYLE_PRESETS: StylePreset[] = [
   }
 ];
 
+interface AdaptiveQuestion {
+  id: string;
+  title: string;
+  description: string;
+  options: {
+    value: string;
+    label: string;
+    desc: string;
+    icon: string;
+  }[];
+}
+
+const ADAPTIVE_QUESTIONS: AdaptiveQuestion[] = [
+  {
+    id: 'learningStyle',
+    title: '¿Cuál es tu canal de aprendizaje predominante?',
+    description: 'Adaptaremos la estructura de la guía (esquemas visuales, explicaciones minuciosas, resúmenes interactivos, etc.) a tu preferencia.',
+    options: [
+      { value: 'visual', label: 'Visual y Gráfico', desc: 'Mapas conceptuales de texto bien estructurados, esquemas ramificados y tablas comparativas de alta densidad.', icon: '👁️' },
+      { value: 'read_write', label: 'Teórico y Explicativo', desc: 'Resúmenes teóricos fluidos, explicaciones paso a paso minuciosas y glosarios extensos.', icon: '📖' },
+      { value: 'active', label: 'Activo y Práctico', desc: 'Enfoque súper aplicado, abundantes casos de estudio prácticos, resolución de problemas y simulaciones.', icon: '🛠️' },
+      { value: 'auditory', label: 'Verbal y Sintetizado', desc: 'Estructuras pensadas para audiodescripción o lectura ágil en voz alta, resúmenes coloquiales dinámicos.', icon: '🎧' }
+    ]
+  },
+  {
+    id: 'studyPace',
+    title: '¿De cuánto tiempo continuo dispones por sesión?',
+    description: 'La segmentación de las tareas diarias del cronograma se calibrará para evitar fatiga cognitiva.',
+    options: [
+      { value: 'pomodoro', label: 'Ráfagas Cortas (Pomodoro - 25 min)', desc: 'Módulos fragmentados en ideas clave sumamente concisas y directas al grano, ideales para pausas frecuentes.', icon: '🍅' },
+      { value: 'balanced', label: 'Sesiones Estándar (Balanced - 50 min)', desc: 'Desglose equilibrado con explicaciones modulares medianas y preguntas rápidas de control de progreso.', icon: '⏳' },
+      { value: 'deep', label: 'Inmersión Absoluta (Deep Dive - 90+ min)', desc: 'Explicaciones en profundidad de amplio alcance, interconectando conceptos avanzados de distintas secciones.', icon: '🧠' }
+    ]
+  },
+  {
+    id: 'priorKnowledge',
+    title: '¿Cuál es tu nivel de familiaridad con esta materia?',
+    description: 'Establecerá el nivel de abstracción del tutor, el desglose de prerrequisitos y el uso de analogías.',
+    options: [
+      { value: 'beginner', label: 'Desde Cero (Principiante)', desc: 'Explica con paciencia extrema los conceptos elementales anteriores y recurre a analogías cotidianas intuitivas.', icon: '🛑' },
+      { value: 'intermediate', label: 'Repaso Estratégico (Intermedio)', desc: 'Sintetiza lo básico para saltar directo a las fórmulas principales, puntos álgidos y trampas recurrentes.', icon: '📈' },
+      { value: 'expert', label: 'Entrenamiento de Élite (Avanzado)', desc: 'Nivel avanzado: centrado en excepciones raras a la regla, casos multivariables y rigor técnico universitario máximo.', icon: '🏆' }
+    ]
+  },
+  {
+    id: 'examFormat',
+    title: '¿Qué formato de examen vas a enfrentar?',
+    description: 'Orientaremos el enfoque de los coreConcepts y el banco de ejercicios para optimizar tu nota de meta.',
+    options: [
+      { value: 'mcq', label: 'Opción Múltiple (Tipo Test)', desc: 'Enfatiza distinciones finas entre términos parecidos, palabras clave trampa y autoevaluación ágil.', icon: '🎯' },
+      { value: 'essay', label: 'Desarrollo Teórico u Oral', desc: 'Enfatiza explicaciones redactadas de forma fluida y ordenada, resúmenes extensos y mapas argumentativos.', icon: '✍️' },
+      { value: 'problems', label: 'Problemas Prácticos o de Cálculo', desc: 'Enfoque absoluto en desglose de fórmulas, constantes, significado de variables paso a paso y flujos matemáticos.', icon: '🧮' }
+    ]
+  }
+];
+
+const getAdaptiveMethodSummary = (answers: { learningStyle: string; studyPace: string; priorKnowledge: string; examFormat: string }) => {
+  const style = ADAPTIVE_QUESTIONS[0].options.find(o => o.value === answers.learningStyle)?.label || '';
+  const pace = ADAPTIVE_QUESTIONS[1].options.find(o => o.value === answers.studyPace)?.label || '';
+  const level = ADAPTIVE_QUESTIONS[2].options.find(o => o.value === answers.priorKnowledge)?.label || '';
+  const exam = ADAPTIVE_QUESTIONS[3].options.find(o => o.value === answers.examFormat)?.label || '';
+  return `${style} • ${pace} • ${level} • Examen: ${exam}`;
+};
+
+const getAdaptivePromptInstructions = (answers: { learningStyle: string; studyPace: string; priorKnowledge: string; examFormat: string }) => {
+  let inst = `\n¡MÉTODO DE ESTUDIO ADAPTATIVO REQUERIDO!:
+El estudiante ha configurado su perfil de aprendizaje de forma interactiva. Adapta el material diario y explicaciones del plan siguiendo estrictamente estas guías:
+`;
+  if (answers.learningStyle === 'visual') {
+    inst += `- ENFOQUE VISUAL: Usa abundantes representaciones lógicas de texto estructuradas de forma gráfica: tablas comparativas, listas desglosadas numeradas, esquemas ramificados y diagramas representados en texto de alta densidad.\n`;
+  } else if (answers.learningStyle === 'read_write') {
+    inst += `- ENFOQUE TEÓRICO/ESCRITO: Resúmenes conceptuales amplios y fluidos, explicaciones exhaustivas, definiciones rigurosas y glosarios detallados sin abreviar conceptos académicos.\n`;
+  } else if (answers.learningStyle === 'active') {
+    inst += `- ENFOQUE PRÁCTICO/ACTIVO: Ve al grano práctico de forma ágil. Complementa inmediatamente los conceptos con casos prácticos reales, analogías de resolución o aplicaciones directas.\n`;
+  } else if (answers.learningStyle === 'auditory') {
+    inst += `- ENFOQUE VERBAL/AUDITIVO: Estilo narrativo muy ameno, directo y fluido ideal para ser escuchado o leído ágilmente en voz alta, dividiendo ideas complejas en ideas clave rápidas.\n`;
+  }
+
+  if (answers.studyPace === 'pomodoro') {
+    inst += `- SEGMENTACIÓN POMODORO: Divide el temario en ideas de lectura muy directa y concisa de 25 minutos, ideales para asimilarse sin fatiga en ráfagas de estudio concentrado.\n`;
+  } else if (answers.studyPace === 'balanced') {
+    inst += `- SEGMENTACIÓN BALANCEADA: Módulos de tamaño equilibrado e intermedio, con preguntas rápidas de control de progreso frecuentes.\n`;
+  } else if (answers.studyPace === 'deep') {
+    inst += `- SEGMENTACIÓN DE INMERSIÓN PROFUNDA: Análisis exhaustivos detallados, vinculando de forma transversal conceptos avanzados de distintas secciones.\n`;
+  }
+
+  if (answers.priorKnowledge === 'beginner') {
+    inst += `- NIVEL PRINCIPIANTE: Explica minuciosamente cualquier prerrequisito de la materia, define términos elementales anteriores y usa analogías sencillas.\n`;
+  } else if (answers.priorKnowledge === 'intermediate') {
+    inst += `- NIVEL INTERMEDIO: Concéntrate en sintetizar fórmulas principales, puntos calientes y trampas típicas del examen directo al grano.\n`;
+  } else if (answers.priorKnowledge === 'expert') {
+    inst += `- NIVEL EXPERTO/AVANZADO: Rigor técnico universitario máximo, excepciones complejas, casos multivariables avanzados de límite y retos matemáticos exigentes.\n`;
+  }
+
+  if (answers.examFormat === 'mcq') {
+    inst += `- EVALUACIÓN TIPO TEST: Resalta distinciones finas entre términos parecidos, falsos amigos en enunciados y palabras clave trampa usuales de opción múltiple.\n`;
+  } else if (answers.examFormat === 'essay') {
+    inst += `- EVALUACIÓN DE PREGUNTAS LARGAS/ORAL: Estructura la teoría con resúmenes ordenados, explicaciones fluidas formalmente redactadas y flujos lógicos fáciles de memorizar para responder por escrito.\n`;
+  } else if (answers.examFormat === 'problems') {
+    inst += `- EVALUACIÓN DE PROBLEMAS O CASOS: Foco absoluto en la modelación matemática y flujos analíticos, desglosando fórmulas, constantes físicas o químicas, significado detallado de variables y operaciones paso a paso.\n`;
+  }
+
+  return inst;
+};
+
 const SAMPLE_SUBJECT = 'Fisiología y Biología Celular: Transporte de Membrana y Potenciales de Acción';
 const SAMPLE_NOTES = 'El profesor indicó que el 40% del examen evaluará la bomba Na+/K+ ATPasa, canales de voltaje y la ecuación de Nernst-Goldman.';
 
@@ -111,6 +217,14 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
   const [isObsoleteModalOpen, setIsObsoleteModalOpen] = useState(false);
   const [validationIssues, setValidationIssues] = useState<Array<{ fileName: string; result: FileValidationResult }>>([]);
   const [isValidationModalOpen, setIsValidationModalOpen] = useState(false);
+  const [wantsAdaptiveMethod, setWantsAdaptiveMethod] = useState<boolean>(true);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
+  const [adaptiveAnswers, setAdaptiveAnswers] = useState({
+    learningStyle: 'visual',
+    studyPace: 'balanced',
+    priorKnowledge: 'intermediate',
+    examFormat: 'mcq'
+  });
   const currentLogo = useCustomLogo();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -253,6 +367,9 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
       .map(preset => preset.promptGuideline);
     
     const parts = [...activeGuidelines];
+    if (wantsAdaptiveMethod) {
+      parts.push(getAdaptivePromptInstructions(adaptiveAnswers));
+    }
     if (customStyleText.trim()) {
       parts.push(`INSTRUCCIONES ADICIONALES DEL ESTUDIANTE: ${customStyleText.trim()}`);
     }
@@ -274,6 +391,7 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
       customNotes,
       preferredProvider: selectedProvider,
       customStyleInstructions: getCombinedStyleInstructions(),
+      adaptiveMethod: wantsAdaptiveMethod ? getAdaptiveMethodSummary(adaptiveAnswers) : '',
     });
   };
 
@@ -780,6 +898,182 @@ export const PlanConfigurator: React.FC<PlanConfiguratorProps> = ({
               />
             </div>
           </div>
+        </div>
+
+        {/* Step 4: Cuestionario de Aprendizaje y Método de Estudio Adaptativo */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 shadow-sm transition-colors space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold text-sm shrink-0">
+                4
+              </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  🧠 Método de Estudio Adaptativo Inteligente
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Responde estas breves preguntas para adaptar la guía y el método de estudio a ti
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const nextVal = !wantsAdaptiveMethod;
+                setWantsAdaptiveMethod(nextVal);
+                if (nextVal) {
+                  setCurrentQuestionIndex(0);
+                }
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0 ${
+                wantsAdaptiveMethod
+                  ? 'bg-indigo-50 dark:bg-indigo-950/50 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300'
+                  : 'bg-slate-50 dark:bg-slate-850 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              {wantsAdaptiveMethod ? '✓ Adaptación Activada' : '✗ Desactivado'}
+            </button>
+          </div>
+
+          {wantsAdaptiveMethod ? (
+            <div className="space-y-4 animate-fadeIn">
+              {/* Questionnaire Progress Stepper */}
+              <div className="flex items-center gap-1.5">
+                {ADAPTIVE_QUESTIONS.map((q, idx) => (
+                  <div
+                    key={q.id}
+                    onClick={() => setCurrentQuestionIndex(idx)}
+                    className={`h-2 flex-1 rounded-full cursor-pointer transition-all duration-300 ${
+                      idx === currentQuestionIndex
+                        ? 'bg-indigo-600'
+                        : idx < currentQuestionIndex
+                        ? 'bg-indigo-300 dark:bg-indigo-800'
+                        : 'bg-slate-200 dark:bg-slate-850'
+                    }`}
+                    title={`Ir a la pregunta ${idx + 1}`}
+                  />
+                ))}
+              </div>
+
+              {/* Current Question Block */}
+              <div className="bg-slate-50/50 dark:bg-slate-800/20 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/80 px-2 py-0.5 rounded-md">
+                    Pregunta {currentQuestionIndex + 1} de {ADAPTIVE_QUESTIONS.length}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    {ADAPTIVE_QUESTIONS[currentQuestionIndex].id === 'learningStyle' ? 'Canal de Aprendizaje' :
+                     ADAPTIVE_QUESTIONS[currentQuestionIndex].id === 'studyPace' ? 'Ritmo y Enfoque' :
+                     ADAPTIVE_QUESTIONS[currentQuestionIndex].id === 'priorKnowledge' ? 'Nivel de Partida' :
+                     'Formato de Examen'}
+                  </span>
+                </div>
+
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+                    {ADAPTIVE_QUESTIONS[currentQuestionIndex].title}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-normal">
+                    {ADAPTIVE_QUESTIONS[currentQuestionIndex].description}
+                  </p>
+                </div>
+
+                {/* Question Options */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3">
+                  {ADAPTIVE_QUESTIONS[currentQuestionIndex].options.map((option) => {
+                    const currentQKey = ADAPTIVE_QUESTIONS[currentQuestionIndex].id as keyof typeof adaptiveAnswers;
+                    const isSelected = adaptiveAnswers[currentQKey] === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setAdaptiveAnswers(prev => ({
+                            ...prev,
+                            [currentQKey]: option.value
+                          }));
+                        }}
+                        className={`p-3 rounded-xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-indigo-50/70 dark:bg-indigo-950/30 border-indigo-400 dark:border-indigo-800 shadow-2xs'
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                        }`}
+                      >
+                        <span className="text-2xl shrink-0 mt-0.5" role="img" aria-label={option.label}>
+                          {option.icon}
+                        </span>
+                        <div className="min-w-0">
+                          <p className={`text-xs sm:text-sm font-bold ${isSelected ? 'text-indigo-800 dark:text-indigo-300' : 'text-slate-800 dark:text-slate-200'}`}>
+                            {option.label}
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-normal">
+                            {option.desc}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Questionnaire Navigation Buttons */}
+                <div className="flex items-center justify-between gap-4 pt-3.5 border-t border-slate-200/50 dark:border-slate-800">
+                  <button
+                    type="button"
+                    disabled={currentQuestionIndex === 0}
+                    onClick={() => setCurrentQuestionIndex(prev => prev - 1)}
+                    className="px-3.5 py-1.5 min-h-[38px] text-xs font-semibold rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer active:scale-95"
+                  >
+                    Anterior
+                  </button>
+
+                  {currentQuestionIndex < ADAPTIVE_QUESTIONS.length - 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentQuestionIndex(prev => prev + 1)}
+                      className="px-4 py-1.5 min-h-[38px] text-xs font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer active:scale-95 flex items-center gap-1"
+                    >
+                      <span>Siguiente</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <span className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-900/60 rounded-xl text-xs font-bold flex items-center gap-1">
+                      ✓ Método Configurado
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Summary Dashboard of Custom Method */}
+              <div className="p-3.5 bg-linear-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-250/20 dark:border-indigo-900/40 rounded-xl text-xs text-indigo-950 dark:text-indigo-200 space-y-1.5">
+                <p className="font-bold flex items-center gap-1.5">
+                  ✨ Método de Estudio Personalizado Calibrado:
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300 pt-1">
+                  <div className="bg-white/60 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/40 dark:border-slate-800/40">
+                    <span className="text-slate-400 block font-normal text-[10px] uppercase tracking-wider mb-0.5">Canal</span>
+                    {ADAPTIVE_QUESTIONS[0].options.find(o => o.value === adaptiveAnswers.learningStyle)?.label}
+                  </div>
+                  <div className="bg-white/60 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/40 dark:border-slate-800/40">
+                    <span className="text-slate-400 block font-normal text-[10px] uppercase tracking-wider mb-0.5">Ritmo</span>
+                    {ADAPTIVE_QUESTIONS[1].options.find(o => o.value === adaptiveAnswers.studyPace)?.label}
+                  </div>
+                  <div className="bg-white/60 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/40 dark:border-slate-800/40">
+                    <span className="text-slate-400 block font-normal text-[10px] uppercase tracking-wider mb-0.5">Familiaridad</span>
+                    {ADAPTIVE_QUESTIONS[2].options.find(o => o.value === adaptiveAnswers.priorKnowledge)?.label}
+                  </div>
+                  <div className="bg-white/60 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/40 dark:border-slate-800/40">
+                    <span className="text-slate-400 block font-normal text-[10px] uppercase tracking-wider mb-0.5">Examen</span>
+                    {ADAPTIVE_QUESTIONS[3].options.find(o => o.value === adaptiveAnswers.examFormat)?.label}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 text-center bg-slate-50/50 dark:bg-slate-800/10 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-500 text-xs">
+              Has desactivado el cuestionario de estudio adaptativo. Tu guía se generará usando las preferencias predeterminadas estándar.
+            </div>
+          )}
         </div>
 
         {/* Dynamic Material Volume & Complexity Engine Card */}

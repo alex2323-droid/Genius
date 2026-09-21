@@ -48,7 +48,7 @@ export interface ParsedFile {
   validationMessage?: string;
 }
 
-export const SUPPORTED_EXTENSIONS = ['pdf', 'pptx', 'ppt', 'docx', 'doc', 'txt', 'md', 'rtf', 'odt', 'odp', 'ods', 'csv'];
+export const SUPPORTED_EXTENSIONS = ['pdf', 'pptx', 'ppt', 'docx', 'doc', 'txt', 'md', 'rtf', 'odt', 'odp', 'ods', 'csv', 'png', 'jpg', 'jpeg', 'webp'];
 
 /**
  * Validates a file BEFORE or DURING reading to detect zero-byte files,
@@ -304,6 +304,16 @@ export async function parseUploadedFile(file: File): Promise<ParsedFile> {
       // 2. Extract real readable text from PDF streams and printable text
       const pdfText = await extractTextFromPdf(arrayBuffer, file.name);
       extractedText = pdfText || `[Documento PDF: ${file.name} - ${Math.round(file.size / 1024)} KB listo para análisis multimodal]`;
+    } else if (['png', 'jpg', 'jpeg', 'webp'].includes(extension)) {
+      // Convert image to base64 for direct vision processing
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      base64 = btoa(binary);
+      extractedText = `[Imagen: ${file.name} - Lista para análisis visual mediante el modelo multimodal Gemini]`;
     } else if (extension === 'pptx') {
       // PowerPoint OpenXML format
       const zip = await JSZip.loadAsync(arrayBuffer);
@@ -514,24 +524,7 @@ async function extractTextFromPdf(buffer: ArrayBuffer, fileName: string): Promis
       return `[Documento PDF: ${fileName}]\n\n${operatorText}`;
     }
 
-    // Clean printable strings extraction
-    const rawStrings = extractPrintableStrings(buffer, 4);
-    const validLines = rawStrings
-      .split('\n')
-      .map(l => l.trim())
-      .filter(l => {
-        if (l.startsWith('/Type') || l.startsWith('/Pages') || l.startsWith('/Font') || l.startsWith('<<') || l.endsWith('>>')) return false;
-        if (l.startsWith('xref') || l.startsWith('trailer') || l.startsWith('startxref') || /^\d+\s+\d+\s+obj/i.test(l)) return false;
-        if (l.startsWith('/MediaBox') || l.startsWith('/CropBox') || l.startsWith('/Contents') || l.startsWith('/Resources')) return false;
-        return l.length > 6 && /[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(l);
-      });
-
-    const fallbackResult = validLines.slice(0, 500).join('\n');
-    if (fallbackResult.length > 80) {
-      return `[Documento PDF: ${fileName}]\n\n${fallbackResult}`;
-    }
-
-    return `[Documento PDF: ${fileName} - ${Math.round(bytes.byteLength / 1024)} KB listo para análisis multimodal]`;
+    return `[Documento PDF: ${fileName} - Escaneado o basado en imágenes. Listo para análisis visual y de contenido mediante el modelo de visión multimodal]`;
   } catch (err) {
     console.warn(`Extracción de texto para PDF ${fileName}:`, err);
     return `[Documento PDF: ${fileName} listo para análisis multimodal]`;

@@ -48,6 +48,7 @@ import { AITutorModal } from './components/AITutorModal.tsx';
 import { SavedPlansDrawer } from './components/SavedPlansDrawer.tsx';
 import { OfflineIndicator } from './components/OfflineIndicator.tsx';
 import { AchievementToast } from './components/AchievementToast.tsx';
+import NotebookLMView from './components/NotebookLMView.tsx';
 import { AchievementsModal } from './components/AchievementsModal.tsx';
 import { AdminLogoModal } from './components/AdminLogoModal.tsx';
 import { FeedbackModal } from './components/FeedbackModal.tsx';
@@ -201,6 +202,7 @@ export function normalizeStudyPlan(raw: any): StudyPlan {
     providerUsed: raw.providerUsed || '',
     providerId: raw.providerId || 'gemini',
     aiCompetitionResult: raw.aiCompetitionResult || undefined,
+    adaptiveMethod: raw.adaptiveMethod || '',
   };
 
   return ensureFullPlanCoverage(planObj, undefined, planObj.subject, planObj.targetGrade, planObj.daysLeft);
@@ -210,7 +212,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [plans, setPlans] = useState<StudyPlan[]>([]);
   const [activePlan, setActivePlan] = useState<StudyPlan | null>(null);
-  const [activeTab, setActiveTab] = useState<'schedule' | 'guide' | 'flashcards' | 'exercises' | 'traps'>('schedule');
+  const [activeTab, setActiveTab] = useState<'schedule' | 'guide' | 'flashcards' | 'exercises' | 'traps' | 'notebooklm'>('schedule');
   const [selectedStudyDay, setSelectedStudyDay] = useState<number | 'all'>('all');
   const [isCreating, setIsCreating] = useState<boolean>(true);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -379,6 +381,7 @@ export default function App() {
     customNotes?: string;
     preferredProvider?: string;
     customStyleInstructions?: string;
+    adaptiveMethod?: string;
   }) => {
     setIsGenerating(true);
     setErrorMessage(null);
@@ -444,6 +447,7 @@ export default function App() {
         subject: config.subject || rawPlan.subject || 'Estudio',
         daysLeft: config.daysLeft,
         targetGrade: config.targetGrade,
+        adaptiveMethod: config.adaptiveMethod || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
@@ -585,6 +589,13 @@ export default function App() {
                     <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
                       {activePlan.daysLeft}d restantes • Meta {activePlan.targetGrade}% • {activePlan.fileNames.length} archivos
                     </p>
+                    {activePlan.adaptiveMethod && (
+                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-150 dark:border-indigo-900/60 shadow-2xs">
+                          🧠 Método Adaptativo: {activePlan.adaptiveMethod}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -705,6 +716,7 @@ export default function App() {
                   { id: 'flashcards', label: 'Tarjetas de Memoria', icon: Layers, badge: `${(activePlan.studyGuide?.flashcards || []).length}` },
                   { id: 'exercises', label: 'Ejercicios y Exámenes', icon: HelpCircle, badge: `${(activePlan.exercises || []).length}` },
                   { id: 'traps', label: 'Trampas de Examen', icon: AlertTriangle, badge: `${(activePlan.studyGuide?.commonExamTraps || []).length}` },
+                  { id: 'notebooklm', label: 'NotebookLM Studio', icon: Sparkles, badge: 'IA' },
                 ].map(tab => {
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
@@ -778,6 +790,13 @@ export default function App() {
                     selectedDayNumber={selectedStudyDay}
                     onSelectDay={setSelectedStudyDay}
                     onNavigateTab={handleNavigateTab}
+                    onUpdatePlan={handleUpdatePlan}
+                  />
+                )}
+
+                {activeTab === 'notebooklm' && (
+                  <NotebookLMView
+                    activePlan={activePlan}
                     onUpdatePlan={handleUpdatePlan}
                   />
                 )}
